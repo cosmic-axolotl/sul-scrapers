@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+
+# segredos — nunca comitar
+.env
+credentials/
+
+# dados gerados pela coleta
+atacado_precos.db
+atacado_precos.db-shm
+atacado_precos.db-wal
+logs/
+screenshots/
+exports/*.csv
