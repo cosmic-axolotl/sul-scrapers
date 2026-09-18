@@ -1,15 +1,19 @@
+# --- dados gerados: nada disso vai pro git ---
+data/raw/http_cache/
+data/raw/cnpj/
+data/coletas/
+data/output/
+credentials/
+logs/
+
+# os intermediários VÃO pro git (são pequenos e a equipe precisa deles)
+!data/interim/
+!data/interim/**
+
+# --- python ---
+.venv/
 venv/
 __pycache__/
-*.pyc
-
-# segredos — nunca comitar
+*.py[cod]
+.pytest_cache/
 .env
-credentials/
-
-# dados gerados pela coleta
-atacado_precos.db
-atacado_precos.db-shm
-atacado_precos.db-wal
-logs/
-screenshots/
-exports/*.csv
