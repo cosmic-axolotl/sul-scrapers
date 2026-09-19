@@ -45,21 +45,47 @@ class Executor(ABC):
         """
         raise NotImplementedError
 
-    def cotar_frete(self, url_produto: str, cep: str) -> tuple[float | None, str]:
+    def cotar_frete(
+        self,
+        url_produto: str,
+        cep: str,
+        produto: ProdutoBruto | None = None,
+    ) -> tuple[float | None, str]:
         """Devolve (valor, observação) para 1 unidade naquele CEP.
 
         Quantidade é sempre 1, então não é preciso montar carrinho: o
         campo de CEP da própria página do produto basta.
+
+        `produto` é o resultado de `detalhar()`, passado adiante para não
+        refazer a mesma requisição uma vez por UF -- e para garantir que
+        o frete é do mesmo SKU e do mesmo vendedor que deram o preço.
+        Quem não precisar dele pode ignorá-lo.
         """
         raise NotImplementedError
+
+    # Sobrescreva no adapter do site quando a heurística de CEP não
+    # pegar. Estes dois são os únicos seletores que o print precisa.
+    SEL_CAMPO_CEP: str = ""
+    SEL_RESULTADO_FRETE: str = ""
 
     def capturar_print(self, url_produto: str, cep: str, destino: str) -> str:
         """Print DEPOIS do frete carregar, com preço e frete na mesma imagem.
 
         Print só do produto não valida entrega, que é o que o
         solicitante quer conferir.
+
+        O padrão serve para qualquer site, inclusive os de plataforma com
+        API: o print é prova para uma pessoa ler, e ninguém confere JSON.
         """
-        raise NotImplementedError
+        from src.export.captura import capturar
+
+        return str(capturar(
+            url_produto,
+            cep,
+            destino,
+            seletor_cep=self.SEL_CAMPO_CEP,
+            seletor_resultado=self.SEL_RESULTADO_FRETE,
+        ))
 
     # --- ciclo de vida ------------------------------------------------------
 

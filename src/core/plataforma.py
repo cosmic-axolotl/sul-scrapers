@@ -7,8 +7,11 @@ busca em JSON — sem navegador, sem parser de HTML.
 
 from __future__ import annotations
 
-from src.core.http import Cliente
+from src.core.http import Cliente, ErroHTTP
+from src.core.log import obter
 from src.models import Plataforma
+
+log = obter(__name__)
 
 # Ordem importa: o primeiro marcador que casar decide.
 MARCADORES: list[tuple[Plataforma, tuple[str, ...]]] = [
@@ -24,7 +27,10 @@ MARCADORES: list[tuple[Plataforma, tuple[str, ...]]] = [
 def detectar(url_base: str, cliente: Cliente) -> Plataforma:
     try:
         html = cliente.get(url_base)
-    except Exception:
+    except ErroHTTP as e:
+        # "desconhecida" manda o site para o Playwright, que é caro. Vale
+        # saber se foi bloqueio ou site fora do ar antes de pagar isso.
+        log.warning("nao consegui ler a home de %s (%s)", url_base, type(e).__name__)
         return Plataforma.DESCONHECIDA
     return detectar_no_html(html)
 
