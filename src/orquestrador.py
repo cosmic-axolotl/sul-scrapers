@@ -14,6 +14,18 @@ Aqui a categoria continua sendo como a equipe divide o trabalho
 ("hoje eu toco UTENSILIOS"), mas depois de selecionar os itens o
 orquestrador reagrupa por domínio antes de instanciar qualquer
 executor. Um processo por site, sempre.
+
+## As duas fases têm planos diferentes, e é de propósito
+
+A varredura existe para descobrir quem vende o quê. A coleta usa essa
+descoberta. Fazer as duas lerem `plano_coleta.csv` criava uma volta
+fechada: para varrer era preciso um plano que só existe depois de
+varrer, e numa base nova nenhuma das duas rodava.
+
+    varredura -> plano de BUSCA:  todo site aprovado x todo item da
+                 categoria. Não depende de nada além do master.
+    coleta    -> plano de COLETA: plano_coleta.csv, gerado pela etapa
+                 2 a partir dos achados da varredura.
 """
 
 from __future__ import annotations
@@ -24,12 +36,16 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
+from src.core import tabelas
 from src.core.http import Cliente
+from src.core.log import obter
 from src.models import Fornecedor, Item
 
+log = obter(__name__)
+
 PLANO = Path("data/interim/plano_coleta.csv")
-FORNECEDORES = Path("data/interim/fornecedores_master.csv")
-ITENS = Path("data/interim/itens.csv")
+FORNECEDORES = tabelas.FORNECEDORES
+ITENS = tabelas.ITENS
 
 MAX_SITES_PARALELOS = 8
 
@@ -39,16 +55,16 @@ MAX_SITES_PARALELOS = 8
 # ---------------------------------------------------------------------------
 
 def carregar_itens(categorias: list[str] | None = None) -> dict[str, Item]:
-    """TODO: ler itens.csv. Se `categorias` vier, filtra por elas."""
-    raise NotImplementedError
+    """Lê itens.csv. Se `categorias` vier, filtra por elas."""
+    return tabelas.ler_itens(categorias)
 
 
 def carregar_fornecedores(apenas_aprovados: bool = True) -> dict[str, Fornecedor]:
-    """TODO: ler fornecedores_master.csv, indexado por domínio.
+    """Lê fornecedores_master.csv, indexado por domínio.
 
     Nenhum site entra na coleta sem estar aqui com status APROVADO.
     """
-    raise NotImplementedError
+    return tabelas.ler_fornecedores(apenas_aprovados)
 
 
 def pertence_ao_shard(dominio: str, shard: int, total: int) -> bool:
@@ -68,7 +84,91 @@ def pertence_ao_shard(dominio: str, shard: int, total: int) -> bool:
     return (int.from_bytes(digest[:4], "big") % total) == (shard - 1)
 
 
+def _selecionar_itens(
+    categorias: list[str] | None,
+    limite: int | None,
+) -> dict[str, Item]:
+    itens = carregar_itens(categorias)
+    if limite:
+        # Piloto: corta a lista para descobrir problema barato antes de
+        # soltar a categoria inteira.
+        itens = dict(list(itens.items())[:limite])
+    return itens
+
+
+def montar_lotes_varredura(
+    categorias: list[str] | None = None,
+    sites: list[str] | None = None,
+    shard: int = 1,
+    total_shards: int = 1,
+    limite: int | None = None,
+) -> dict[str, list[str]]:
+    """Plano de BUSCA: {dominio: [id_item, ...]}, todo site x todo item.
+
+    Não lê `plano_coleta.csv` — não pode, é ele quem produz o insumo
+    desse arquivo. A única entrada é o master de fornecedores, que a
+    etapa 1 já produziu.
+    """
+    itens = _selecionar_itens(categorias, limite)
+    fornecedores = carregar_fornecedores(apenas_aprovados=True)
+
+    lotes: dict[str, list[str]] = {}
+    for dominio in fornecedores:
+        if sites and dominio not in sites:
+            continue
+        if not pertence_ao_shard(dominio, shard, total_shards):
+            continue
+        lotes[dominio] = list(itens)
+
+    if not lotes:
+        log.warning(
+            "nenhum site aprovado nesta fatia (shard %d/%d, filtro de site: %s)",
+            shard, total_shards, sites or "nenhum",
+        )
+    return lotes
+
+
+def montar_lotes_coleta(
+    categorias: list[str] | None = None,
+    sites: list[str] | None = None,
+    shard: int = 1,
+    total_shards: int = 1,
+    limite: int | None = None,
+) -> dict[str, list[str]]:
+    """Plano de COLETA: {dominio: [id_item, ...]}, do plano_coleta.csv.
+
+    O plano já diz quais itens existem em cada site, com a URL
+    descoberta na varredura. Aqui só se aplicam os filtros.
+    """
+    if not PLANO.exists():
+        raise FileNotFoundError(
+            f"{PLANO} nao existe. A coleta depende da varredura: rode "
+            "`python -m src.orquestrador varredura ...` e depois "
+            "`python -m src.runners.etapa2_plano`."
+        )
+
+    itens = _selecionar_itens(categorias, limite)
+    lotes: dict[str, list[str]] = defaultdict(list)
+
+    with PLANO.open(encoding="utf-8", newline="") as f:
+        for linha in csv.DictReader(f):
+            dominio = (linha.get("dominio") or "").strip()
+            if not dominio:
+                continue
+            if sites and dominio not in sites:
+                continue
+            if not pertence_ao_shard(dominio, shard, total_shards):
+                continue
+            for id_bruto in (linha.get("ids_itens") or "").split("|"):
+                id_item = id_bruto.strip()
+                if id_item in itens:
+                    lotes[dominio].append(id_item)
+
+    return {d: ids for d, ids in lotes.items() if ids}
+
+
 def montar_lotes(
+    fase: str,
     categorias: list[str] | None = None,
     sites: list[str] | None = None,
     shard: int = 1,
@@ -77,33 +177,17 @@ def montar_lotes(
 ) -> dict[str, list[str]]:
     """O coração do orquestrador: {dominio: [id_item, ...]}.
 
-    Lê o plano de coleta (que já diz quais itens existem em cada site),
-    aplica os filtros de categoria e/ou site, e devolve o trabalho
-    agrupado por domínio.
-
     Note que o filtro de categoria some depois desta função: daqui para
     baixo ninguém mais sabe o que é categoria, só site e lista de itens.
     """
-    itens = carregar_itens(categorias)
-    if limite:
-        # Piloto: corta a lista para descobrir problema barato antes de
-        # soltar a categoria inteira.
-        itens = dict(list(itens.items())[:limite])
+    montar = {
+        "varredura": montar_lotes_varredura,
+        "coleta": montar_lotes_coleta,
+    }.get(fase)
+    if montar is None:
+        raise ValueError(f"fase desconhecida: {fase}")
 
-    lotes: dict[str, list[str]] = defaultdict(list)
-
-    with PLANO.open(encoding="utf-8") as f:
-        for linha in csv.DictReader(f):
-            dominio = linha["dominio"]
-            if sites and dominio not in sites:
-                continue
-            if not pertence_ao_shard(dominio, shard, total_shards):
-                continue
-            for id_bruto in linha["ids_itens"].split("|"):
-                id_item = id_bruto.strip()
-                if id_item in itens:
-                    lotes[dominio].append(id_item)
-
+    lotes = montar(categorias, sites, shard, total_shards, limite)
     # Sites com mais itens primeiro: falha cedo onde dói mais.
     return dict(sorted(lotes.items(), key=lambda kv: -len(kv[1])))
 
@@ -123,16 +207,21 @@ def rodar_site(dominio: str, ids_itens: list[str], fase: str) -> dict:
     fornecedores = carregar_fornecedores()
     fornecedor = fornecedores[dominio]
     itens = carregar_itens()
+    lote = [itens[i] for i in ids_itens if i in itens]
 
-    with Cliente() as cliente, criar(fornecedor, cliente) as executor:
+    # O cache serve à varredura e atrapalha a coleta: preço e frete da
+    # entrega são de hoje, não da semana passada.
+    cliente = Cliente.para_varredura() if fase == "varredura" else Cliente.para_coleta()
+
+    with cliente, criar(fornecedor, cliente) as executor:
         if fase == "varredura":
             from src.runners.etapa2_varredura import varrer_site
 
-            return varrer_site(executor, [itens[i] for i in ids_itens])
+            return varrer_site(executor, lote)
         if fase == "coleta":
             from src.runners.etapa3_coletar import coletar_site
 
-            return coletar_site(executor, [itens[i] for i in ids_itens])
+            return coletar_site(executor, lote)
         raise ValueError(f"fase desconhecida: {fase}")
 
 
@@ -144,17 +233,21 @@ def orquestrar(
     shard: int = 1,
     total_shards: int = 1,
     limite: int | None = None,
-) -> None:
+) -> dict:
     """Dispara um processo por site, N sites ao mesmo tempo.
 
     Por ser um processo por domínio, o rate limit por domínio se
     resolve por construção: dois workers nunca tocam a mesma loja.
     """
-    lotes = montar_lotes(categorias, sites, shard, total_shards, limite)
+    lotes = montar_lotes(fase, categorias, sites, shard, total_shards, limite)
     print(
-        f"[orquestrador] shard {shard}/{total_shards} — "
+        f"[orquestrador] {fase} — shard {shard}/{total_shards} — "
         f"{len(lotes)} sites, {sum(len(v) for v in lotes.values())} pares site-item"
     )
+
+    resumo = {"sites": len(lotes), "ok": 0, "erro": 0}
+    if not lotes:
+        return resumo
 
     with ProcessPoolExecutor(max_workers=paralelos) as pool:
         futuros = {
@@ -165,10 +258,33 @@ def orquestrar(
             dominio = futuros[futuro]
             try:
                 resultado = futuro.result()
+                resumo["ok"] += 1
                 print(f"[ok] {dominio}: {resultado}")
             except Exception as e:  # um site que quebra não derruba os outros
-                print(f"[erro] {dominio}: {e}")
-                # TODO: registrar em data/raw/bloqueadas.csv e avisar o grupo
+                resumo["erro"] += 1
+                log.exception("%s quebrou na fase %s", dominio, fase)
+                print(f"[erro] {dominio}: {type(e).__name__}: {e}")
+                _registrar_falha(dominio, fase, e)
+
+    print(f"[orquestrador] {resumo['ok']} sites ok, {resumo['erro']} com erro")
+    return resumo
+
+
+def _registrar_falha(dominio: str, fase: str, erro: Exception) -> None:
+    """Site que quebrou vira linha em data/raw/falhas.csv, não só log."""
+    from datetime import datetime
+
+    caminho = Path("data/raw/falhas.csv")
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    novo = not caminho.exists()
+    with caminho.open("a", newline="", encoding="utf-8") as f:
+        escritor = csv.writer(f)
+        if novo:
+            escritor.writerow(["dominio", "fase", "quando", "erro", "mensagem"])
+        escritor.writerow([
+            dominio, fase, datetime.now().isoformat(timespec="seconds"),
+            type(erro).__name__, str(erro)[:300],
+        ])
 
 
 if __name__ == "__main__":
@@ -192,4 +308,9 @@ if __name__ == "__main__":
     a = p.parse_args()
 
     shard, total_shards = (int(x) for x in a.shard.split("/"))
-    orquestrar(a.fase, a.categorias, a.sites, a.paralelos, shard, total_shards, a.limite)
+    try:
+        orquestrar(a.fase, a.categorias, a.sites, a.paralelos, shard, total_shards, a.limite)
+    except FileNotFoundError as e:
+        # Falta de arquivo é erro de ordem das etapas, não defeito de
+        # código: a mensagem já diz o que rodar, o traceback só atrapalha.
+        raise SystemExit(f"[orquestrador] {e}") from None
