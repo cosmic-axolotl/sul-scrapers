@@ -23,6 +23,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from src.core import tabelas
+from src.core.frete import houve_recusa
 from src.core.log import obter
 from src.export.prints import caminho_miniatura, embutir, gerar_miniatura
 
@@ -62,10 +63,16 @@ def problema(candidato: dict) -> str:
     if not Path(caminho).exists():
         return "print não está no disco"
 
-    if candidato.get("valor_frete") in (None, "") and not (
-        candidato.get("obs_frete") or ""
-    ).strip():
-        return "frete não resolvido"
+    obs_frete = (candidato.get("obs_frete") or "").strip()
+    if candidato.get("valor_frete") in (None, ""):
+        if not obs_frete:
+            return "frete não resolvido"
+        # Frete sob consulta é resultado legítimo e entra com observação.
+        # "Não entrega neste CEP" não é: é o fornecedor dizendo que a
+        # linha não existe. Passou a ser o descarte mais comum desde que
+        # a lista deixou de se limitar ao Sul e a SP.
+        if houve_recusa(obs_frete):
+            return "fornecedor não entrega nesta UF"
 
     if _numero(candidato.get("score_match")) < SCORE_MINIMO:
         return f"score {_numero(candidato.get('score_match')):.2f} abaixo do mínimo"

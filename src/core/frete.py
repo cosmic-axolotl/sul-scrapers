@@ -25,6 +25,33 @@ CEP_FORA_DO_SUL = "01310100"
 # cotação. Não é o valor: é o sinal de que existe um mínimo.
 PISTAS_MINIMO = ("acima de", "a partir de", "compras acima", "minimo", "mínimo")
 
+# Marcador que o adapter põe na observação quando a loja respondeu e
+# disse que NÃO entrega naquele CEP. É diferente de "não consegui
+# cotar": o primeiro reprova o fornecedor, o segundo só deixa a
+# pergunta em aberto. Sem essa distinção, um site fora do ar viraria
+# "não entrega no Sul" e sairia da lista por engano.
+SEM_ENTREGA = "sem opcao de entrega"
+
+
+def _sem_acento(texto: str) -> str:
+    from unidecode import unidecode
+
+    return unidecode(str(texto or "")).lower()
+
+
+def houve_recusa(observacao: str) -> bool:
+    """A loja respondeu e disse que não entrega ali."""
+    return SEM_ENTREGA in _sem_acento(observacao)
+
+
+def _entrega(valor: float | None, observacao: str) -> bool | None:
+    """True entrega, False não entrega, None não deu para saber."""
+    if valor is not None:
+        return True
+    if houve_recusa(observacao):
+        return False
+    return None
+
 
 def classificar_site(
     fornecedor: Fornecedor,
@@ -42,12 +69,21 @@ def classificar_site(
 
     Uma unidade só é o que a entrega pede, então GRATIS_ACIMA_DE é, na
     prática, frete cobrado: o mínimo nunca é alcançado por 1 item.
+
+    `entrega_sul` só traz a UF sobre a qual houve resposta. UF que a
+    loja recusou entra como False; UF que não deu para cotar fica de
+    fora do dicionário, e não vira um False que reprovaria o
+    fornecedor por um timeout.
     """
     cotacoes: dict[str, tuple[float | None, str]] = {}
     for uf, cep in CEPS_SUL.items():
         cotacoes[uf] = _cotar(executor, url_produto_exemplo, cep)
 
-    entrega_sul = {uf: valor is not None for uf, (valor, _) in cotacoes.items()}
+    entrega_sul = {
+        uf: atende
+        for uf, (valor, obs) in cotacoes.items()
+        if (atende := _entrega(valor, obs)) is not None
+    }
     valores = [valor for valor, _ in cotacoes.values() if valor is not None]
     observacoes = " ".join(obs.lower() for _, obs in cotacoes.values())
 

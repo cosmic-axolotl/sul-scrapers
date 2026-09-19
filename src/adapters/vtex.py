@@ -33,6 +33,7 @@ from __future__ import annotations
 from urllib.parse import quote, urlparse
 
 from src.adapters.base import Executor
+from src.core.frete import SEM_ENTREGA
 from src.core.http import ErroHTTP, RespostaInvalida, SiteBloqueado
 from src.core.log import obter
 from src.models import ProdutoBruto
@@ -248,7 +249,11 @@ class VtexExecutor(Executor):
             if isinstance(sla, dict)
         ]
         if not slas:
-            return None, "sem opcao de entrega para este CEP"
+            # A loja respondeu e nao entrega neste CEP. O marcador vem de
+            # core.frete porque quem le isso -- a etapa 1, para reprovar, e
+            # o montador, para nao deixar a linha entrar sem frete -- precisa
+            # distinguir recusa de "nao consegui cotar".
+            return None, f"{SEM_ENTREGA} para este CEP"
 
         melhor = min(slas, key=lambda s: _numero(s.get("price")) or 0.0)
         centavos = _numero(melhor.get("price"))

@@ -63,14 +63,20 @@ class Fornecedor:
     nome: str
     dominio: str  # CHAVE PRIMÁRIA — normalizada
     url_base: str
-    uf: str  # PR | SC | RS | SP
+    # UF da SEDE, para referência — não é critério. Fornecedor de
+    # qualquer estado entra, desde que entregue no Sul e passe no
+    # CNAE/CNPJ. Quem decide é `entrega_sul`, não este campo.
+    uf: str
     cnpj: str | None = None  # só dígitos, 14 chars
     cnae_principal: str | None = None
     cnaes_secundarios: list[str] = field(default_factory=list)
     situacao_cadastral: str | None = None
     eh_atacadista: bool | None = None
     flag_atacarejo: bool = False
-    entrega_sul: dict[str, bool] = field(default_factory=dict)  # {"PR": True, ...}
+    # {"PR": True, "SC": False}. Só traz a UF sobre a qual houve
+    # resposta: UF ausente é "não deu para saber", não é "não entrega".
+    # É este campo, e não a UF da sede, que aprova ou reprova.
+    entrega_sul: dict[str, bool] = field(default_factory=dict)
     plataforma: Plataforma = Plataforma.DESCONHECIDA
     modo_frete: ModoFrete | None = None
     status: Status = Status.PENDENTE

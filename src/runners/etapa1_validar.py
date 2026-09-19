@@ -403,6 +403,38 @@ def validar(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
     return fornecedor
 
 
+def decidir_entrega(fornecedor: Fornecedor) -> Fornecedor:
+    """Entrega no Sul é critério de aprovação, não anotação.
+
+    Passou a ser o filtro que de fato importa. Enquanto só entravam
+    lojas do Sul e de SP, a geografia fazia esse trabalho de graça;
+    abrindo para o país inteiro, o que separa um atacadista útil de um
+    inútil é exatamente se ele coloca a caixa em Curitiba.
+
+    Reprova só com prova: é preciso ter havido recusa nas três UFs.
+    Timeout, bloqueio e site fora do ar deixam a pergunta em aberto, e
+    fornecedor não some da lista por causa de uma tarde ruim de rede.
+    """
+    respostas = fornecedor.entrega_sul
+
+    if any(respostas.values()):
+        atendidas = sorted(uf for uf, atende in respostas.items() if atende)
+        fornecedor.motivo = f"{fornecedor.motivo} | entrega em {', '.join(atendidas)}".strip(" |")
+        return fornecedor
+
+    if len(respostas) == len(UFS_SUL):  # as três responderam, e todas recusaram
+        fornecedor.status = Status.REPROVADO
+        fornecedor.motivo = "não entrega em PR, SC nem RS"
+        return fornecedor
+
+    fornecedor.status = Status.PENDENTE
+    faltam = [uf for uf in UFS_SUL if uf not in respostas]
+    fornecedor.motivo = (
+        f"entrega no Sul não confirmada (sem resposta para {', '.join(faltam)})"
+    )
+    return fornecedor
+
+
 def testar_entrega(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
     """Confirma entrega em PR, SC e RS e classifica o modo de frete.
 
@@ -427,8 +459,9 @@ def testar_entrega(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
             )
     except (ErroHTTP, NotImplementedError) as e:
         log.warning("%s: teste de entrega falhou (%s)", fornecedor.dominio, type(e).__name__)
+        return fornecedor
 
-    return fornecedor
+    return decidir_entrega(fornecedor)
 
 
 def main(com_frete: bool = False, retomar: bool = True) -> list[Fornecedor]:
