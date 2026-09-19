@@ -15,11 +15,12 @@ Template de saída: `data/raw/FNDE_output.xlsx` (15 colunas) + uma 16ª coluna `
 ## Regras invioláveis
 
 1. **Só entra fornecedor com CNAE principal na divisão 46** (atacado). Divisão 47 com 46 secundário entra com `flag_atacarejo = SIM`. Situação cadastral diferente de ATIVA reprova.
-2. **Nenhum site é coletado sem estar em `data/interim/fornecedores_master.csv` com status APROVADO.**
-3. **O site é a unidade de execução**, não o item nem a categoria. Um processo por domínio, sempre.
-4. **Coleta e montagem são programas separados.** O coletor não conhece o template do FNDE; o montador não abre navegador.
-5. **Marca e fabricante não entram no pipeline.** O critério é aderência à descrição, medida por score.
-6. **Print é requisito**, tirado depois de preencher o CEP, com o frete visível na mesma imagem.
+2. **A UF da sede não é critério; entregar no Sul é.** Fornecedor de qualquer estado entra, desde que entregue em PR, SC ou RS e passe no CNAE/CNPJ. Quem decide é `entrega_sul`, e reprovação exige **recusa** da loja nas três UFs — timeout ou site fora do ar deixa PENDENTE, não reprova.
+3. **Nenhum site é coletado sem estar em `data/interim/fornecedores_master.csv` com status APROVADO.**
+4. **O site é a unidade de execução**, não o item nem a categoria. Um processo por domínio, sempre.
+5. **Coleta e montagem são programas separados.** O coletor não conhece o template do FNDE; o montador não abre navegador.
+6. **Marca e fabricante não entram no pipeline.** O critério é aderência à descrição, medida por score.
+7. **Print é requisito**, tirado depois de preencher o CEP, com o frete visível na mesma imagem.
 
 ## Contrato de dados
 
@@ -34,14 +35,14 @@ class Fornecedor:
     nome: str
     dominio: str              # CHAVE PRIMÁRIA, normalizada: "gpinox.com.br"
     url_base: str
-    uf: str                   # PR | SC | RS | SP
+    uf: str                   # UF da SEDE, referência -- não é critério
     cnpj: str | None          # só dígitos, 14 chars
     cnae_principal: str | None
     cnaes_secundarios: list[str]
     situacao_cadastral: str | None
     eh_atacadista: bool | None
     flag_atacarejo: bool
-    entrega_sul: dict[str, bool]   # {"PR": True, "SC": False, ...}
+    entrega_sul: dict[str, bool]   # UF ausente = não deu para saber, != não entrega
     plataforma: Plataforma    # vtex|woocommerce|nuvemshop|shopify|tray|magento|desconhecida
     modo_frete: ModoFrete | None
     status: Status            # APROVADO | REPROVADO | PENDENTE

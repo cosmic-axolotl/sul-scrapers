@@ -18,7 +18,7 @@ AGENTS.md é a fonte única. É um formato aberto, mantido pela Agentic AI Found
 
 | Arquivo | Linhas | Para que serve |
 |---|---|---|
-| AGENTS.md | 269 | Todo o conteúdo. O único que se edita. |
+| AGENTS.md | 270 | Todo o conteúdo. O único que se edita. |
 | CLAUDE.md | 6 | Uma linha: @AGENTS.md. O Claude Code lê CLAUDE.md e não AGENTS.md |
 | GEMINI.md | 9 | Aponta para o AGENTS.md. O Gemini CLI lê GEMINI.md por padrão |
 | .gemini/settings.json | 5 | Faz o Gemini CLI ler AGENTS.md direto, sem passar pelo ponteiro |
@@ -35,7 +35,7 @@ Não é um resumo do projeto — para isso existe o guia da equipe. É o conjunt
 - As regras de matching, inclusive o que faz uma divergência de medida ou embalagem reprovar
 - A política de cache por fase, as convenções de código e os limites de rate limit
 - Como rodar os testes
-Um detalhe que importa e é contraintuitivo: arquivo grande piora o resultado. Cada token do AGENTS.md é carregado a cada interação, e pesquisa com repositórios reais indica que arquivos escritos por humanos reduzem bugs de forma significativa, enquanto arquivos inchados ou gerados automaticamente pioram o desempenho e o custo. O arquivo está hoje em 269 linhas, e cresceu ao absorver as regras de matching e de cache. Esse é o teto prático: daqui para cima, o excedente vira documentação em docs/.
+Um detalhe que importa e é contraintuitivo: arquivo grande piora o resultado. Cada token do AGENTS.md é carregado a cada interação, e pesquisa com repositórios reais indica que arquivos escritos por humanos reduzem bugs de forma significativa, enquanto arquivos inchados ou gerados automaticamente pioram o desempenho e o custo. O arquivo está hoje em 270 linhas, e cresceu ao absorver as regras de matching e de cache. Esse é o teto prático: daqui para cima, o excedente vira documentação em docs/.
 
 ## 3. O que cada ferramenta consegue fazer com o repositório
 
@@ -131,7 +131,7 @@ sul-scrapers/
     conftest.py          fixtures comuns e o Cliente falso
     loja_falsa.py        uma loja VTEX servida em localhost
     fixtures/            JSON salvo, para testar offline
-    test_*.py            154 testes
+    test_*.py            171 testes
 ```
 
 Quatro observações sobre esta árvore.
@@ -264,6 +264,7 @@ Quem coleta não sabe o que é o template do FNDE. O coletor escreve .jsonl cru;
 models.py define Item, Fornecedor, ProdutoBruto, Achado e Coleta. Três pontos que já causaram erro e valem destaque:
 
 - id_item é str, nunca int. O ID FGV mistura "1" e "33" com "G008", "U029" e "318N" — 96 dos 144 não são números. Converter para int perde dois terços da lista.
+- uf é a UF da SEDE e não é critério de nada. Quem aprova ou reprova é entrega_sul, e nele a UF ausente significa "não deu para saber", não "não entrega" — a diferença é o que impede um site fora do ar de ser reprovado por engano.
 - ProdutoBruto tem preco e preco_lista. preco é o que se paga; preco_lista é o riscado. A entrega tem coluna para os dois mais a diferença, e ler só um dos campos apaga o desconto.
 - Achado tem classificacao (aceito | revisar). Sem ela, o plano de coleta não consegue separar o que foi aprovado do que espera revisão humana — e mandaria os dois para a coleta.
 Campos acrescentados depois do congelamento são sempre opcionais, com padrão: nada que já existia mudou de nome ou de tipo.
@@ -290,10 +291,10 @@ O print é a exceção que vale citar: ele não é responsabilidade de cada adap
 
 ## 7. Testes
 
-São 154 testes, e nenhum deles toca a rede de verdade.
+São 171 testes, e nenhum deles toca a rede de verdade.
 
 ```
-pytest -m "not lento"   # 145 testes, ~4 s
+pytest -m "not lento"   # 162 testes, ~4 s
 pytest                  # inclui o fluxo completo com navegador (~2 min)
 pytest -m lento         # so o fluxo completo
 ```

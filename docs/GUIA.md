@@ -49,12 +49,14 @@ Atenção ao caso VEICULOS, que mudou: os dois itens são pneus (235/75R17.5 e 2
 
 ### Critérios de aceitação de um fornecedor
 
-A ordem de prioridade é: loja da região Sul → loja de São Paulo que entrega no Sul. Em qualquer dos dois casos, valem as cinco regras abaixo, e a regra 1 é eliminatória.
+A UF da sede não é critério. Loja de qualquer estado entra, desde que entregue no Sul e passe no CNAE/CNPJ — um atacadista de Goiás que coloca a caixa em Curitiba serve exatamente como um de Curitiba. A ordem de PRIORIDADE continua sendo Sul, depois São Paulo, depois o resto do país, porque perto costuma sair mais barato de frete e mais rápido de entregar; mas é ordem de busca, não de aceitação.
+
+Valem as cinco regras abaixo. A regra 1 é eliminatória, e a regra 4 passou a ser o filtro que de fato separa um fornecedor útil de um inútil — enquanto só entravam lojas do Sul e de SP, a geografia fazia esse trabalho de graça.
 
 - CNAE principal de atacado. O CNPJ precisa ter CNAE principal na divisão 46 (comércio por atacado). CNAE principal na divisão 47 (varejo) reprova.
 - Atacarejo entra com flag. CNAE principal de varejo mas com CNAE secundário 46xx → aceita, com flag_atacarejo = SIM.
 - CNPJ ativo. Situação cadastral diferente de ATIVA (baixada, suspensa, inapta) reprova, mesmo com CNAE certo.
-- Entrega em PR, SC e RS. Confirmada por simulação de frete ou por política de entrega publicada no site.
+- Entrega no Sul. Confirmada por simulação de frete nos três CEPs. Atender uma UF já serve — cada linha da entrega é item × fornecedor × UF, então quem só entrega no PR ainda rende as linhas do PR. Reprova quem for RECUSADO nas três: timeout, bloqueio ou site fora do ar deixam PENDENTE, porque uma tarde ruim de rede não é prova de que a loja não entrega.
 - Site próprio com preço visível. Marketplace puro, catálogo em PDF ou "consulte um vendedor" não serve para raspagem de preço.
 
 ### Onde estamos hoje
@@ -110,14 +112,14 @@ class Fornecedor:
     nome: str
     dominio: str              # CHAVE PRIMARIA, normalizada: "gpinox.com.br"
     url_base: str
-    uf: str                   # PR | SC | RS | SP
+    uf: str                   # UF da SEDE, referencia -- NAO e criterio
     cnpj: str | None          # so digitos, 14 chars
     cnae_principal: str | None
     cnaes_secundarios: list[str]
     situacao_cadastral: str | None
     eh_atacadista: bool | None
     flag_atacarejo: bool
-    entrega_sul: dict[str, bool]   # {"PR": True, "SC": False, ...}
+    entrega_sul: dict[str, bool]   # UF ausente = nao deu para saber != nao entrega
     plataforma: Plataforma    # vtex | woocommerce | nuvemshop | shopify | tray | magento | desconhecida
     modo_frete: ModoFrete | None
     status: Status            # APROVADO | REPROVADO | PENDENTE
@@ -228,13 +230,17 @@ A pendência dos pneus. Os 2 itens de VEICULOS precisam de distribuidora de auto
 
 5. Testar entrega no Sul. Três CEPs representativos, um por estado, batidos contra a calculadora de frete da loja: Curitiba/PR 80010-010, Florianópolis/SC 88010-400, Porto Alegre/RS 90010-150. Em plataforma conhecida isso é uma chamada de API (ver Etapa 2). Este é o ponto mais lento da Etapa 1 — por isso vem depois do filtro de CNAE, rodando só sobre quem já passou, e só quando se pede: python -m src.runners.etapa1_validar --com-frete.
 
+É aqui que o fornecedor de fora do eixo é aprovado ou reprovado, e a distinção que o código faz importa: a loja RECUSAR o CEP é diferente de não dar para cotar. Recusa nas três UFs reprova; falha técnica deixa PENDENTE, com a UF de fora do registro em vez de gravada como "não entrega". Sem isso, um site fora do ar numa tarde sairia da lista por engano, e ninguém saberia por quê.
+
 ### O problema dos status livres
 
 A planilha do colega tem 37 valores diferentes na coluna "Status atual" — PENDENTE SITE, PENDENTE - SEM SITE, REVALIDAR VÍNCULO SITE-CNPJ e assim por diante. Isso é impossível de filtrar em código. O unificador mapeia tudo para três valores (APROVADO, REPROVADO, PENDENTE) pelo prefixo e joga o texto original para a coluna motivo.
 
 ### Prospecção de candidatos novos
 
-Rodando em paralelo ao pipeline, duas pessoas buscando ampliar a lista. Termos que funcionam: distribuidora utensílios cozinha industrial atacado {cidade}, atacadista EPI {estado}, distribuidor uniforme profissional atacado sul. Vale também pegar a lista de expositores de feiras do setor e associações comerciais estaduais.
+Rodando em paralelo ao pipeline, duas pessoas buscando ampliar a lista. Termos que funcionam: distribuidora utensílios cozinha industrial atacado {cidade}, atacadista EPI {estado}, distribuidor uniforme profissional atacado. Vale também pegar a lista de expositores de feiras do setor e associações comerciais estaduais.
+
+E o campo de busca não precisa mais terminar em "sul". Como a UF da sede deixou de ser critério, distribuidora de São Paulo, Minas ou Goiás com envio nacional entra na lista do mesmo jeito — e é onde está o volume, porque atacadista grande costuma ser de fora. O que vale procurar junto é a pista de cobertura: "envio para todo o Brasil", "entrega nacional", "frete para todo o país".
 
 O output delas é só isso: nome + domínio numa linha de CSV. O CNPJ, o CNAE e a entrega quem resolve é o pipeline.
 
@@ -673,10 +679,10 @@ O motivo: preço, estoque e frete entram na entrega com a data da coleta ao lado
 
 ### Qualidade sob pressão
 
-São 154 testes, e nenhum deles toca a rede de verdade:
+São 171 testes, e nenhum deles toca a rede de verdade:
 
 ```
-pytest -m "not lento"   # 145 testes, ~4 s
+pytest -m "not lento"   # 162 testes, ~4 s
 pytest                  # inclui o fluxo completo com navegador (~2 min)
 ```
 
@@ -760,7 +766,8 @@ Etapa 1
 
 - Todo aprovado tem CNPJ com dígito válido, CNAE e situação ATIVA
 - flag_atacarejo preenchida em todas as linhas
-- Entrega para PR, SC e RS testada com os três CEPs
+- Entrega testada com os três CEPs, e entrega_sul preenchida em todo aprovado
+- Ninguém reprovado por "não entrega" sem recusa da loja nas três UFs
 - Coluna plataforma preenchida
 - Coluna modo_frete classificada
 - SUBCLASSES_AUTOPECAS_ATACADO preenchida, ou os 2 pneus declarados fora do escopo automático
@@ -795,6 +802,7 @@ Nada está pendente com o solicitante. Para referência rápida:
 | Granularidade | Uma linha por item × fornecedor × UF |
 | Entrega | Sete .xlsx, um por categoria, zipados com a pasta prints/ |
 | Print | Requisito, com preço e frete da UF na mesma imagem, miniatura embutida |
+| Origem do fornecedor | A UF da sede não é critério: entra loja de qualquer estado que entregue no Sul e passe no CNAE/CNPJ |
 | Marca e fabricante | Fora do pipeline; o critério é aderência à descrição |
 | Coleta automática | UTENSILIOS, EQUIPAMENTO, EPI, UNIFORMES, VEICULOS — 132 itens |
 | Coleta manual | COMBUSTÍVEL, SAÚDE OCUPACIONAL — 12 itens, 180 linhas |
@@ -817,6 +825,7 @@ O documento é somente leitura para a equipe e editado por uma pessoa só. Quem 
 | 18/09 | Execução por categoria, com --shard por site e --limite para piloto | Divide uma categoria entre máquinas sem colisão de domínio |
 | 18/09 | Repositório neutro de ferramenta: AGENTS.md como fonte única | Parte da equipe usa ChatGPT ou Gemini; ninguém pode ficar sem contexto |
 | 19/09 | Guia conferido linha a linha contra o código e corrigido em 17 pontos: contrato de dados (id_item é str, cinco dataclasses), comandos de varredura e coleta (rodam pelo orquestrador, não pelo runner), VEICULOS é automático (132 itens e 12 manuais, não 130 e 14), regras de matching por embalagem e divergência, critério da reserva, validade do cache e a lacuna de Tray/Magento | O código mudou na correção dos 8 pontos críticos levantados na análise do repositório, e o guia passou a contradizê-lo. Guia que contradiz o código em silêncio é pior que guia nenhum |
+| 19/09 | A UF da sede deixa de ser critério: entra fornecedor de qualquer estado que entregue em PR, SC ou RS e passe no CNAE/CNPJ. Em troca, entrega no Sul passa a ser verificada de verdade — reprova quem for recusado nas três UFs, e a linha cujo frete diz "sem opção de entrega" não vai mais para a planilha | Limitar a lista ao Sul e a SP jogava fora atacadista grande de fora do eixo que envia para o país inteiro, e a cobertura por item é a métrica que decide se a entrega existe. Enquanto a geografia filtrava de graça, ninguém verificava entrega; abrindo, ela vira o filtro que de fato importa, e não havia código que a aplicasse |
 | 19/09 | Prospecção passa a entregar em data/raw/leads/, em formato livre: qualquer .csv ou .xlsx, exigindo só uma coluna de site — reconhecida por sinônimo (site, url, dominio, link, endereco, pagina, website, portal). Planilha sem essa coluna agora derruba a Etapa 1 com mensagem nomeando arquivo e colunas | O guia já prometia que a frente C entregaria "nome + domínio numa linha de CSV", mas não havia código que lesse esse arquivo: as duas planilhas originais estavam fixas no código, com nome de aba e de coluna. Pior, coluna com outro nome devolvia zero fornecedores em silêncio |
 
 ### O que registrar aqui

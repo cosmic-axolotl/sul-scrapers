@@ -62,15 +62,18 @@ levam minutos e já revelam adapter quebrado ou termo de busca ruim.
 ## Regras que não se quebram
 
 1. Só entra fornecedor com CNAE principal de atacado e CNPJ ativo.
-2. Nenhum site é coletado sem estar aprovado em `fornecedores_master.csv`.
-3. O **site** é a unidade de execução — um processo por domínio, sempre.
-4. Coleta e montagem são programas separados.
-5. `id_item` é **texto**, nunca int (`U001`, `G008`, `318N`).
-6. Máximo 3 requisições simultâneas por domínio.
-7. Cinco linhas não são cinco fornecedores: a entrega pede 5 **domínios
+2. A UF da sede não importa: entra loja de qualquer estado, desde que
+   entregue em PR, SC ou RS. Quem decide é `entrega_sul`, e só a recusa
+   da loja reprova — timeout deixa PENDENTE.
+3. Nenhum site é coletado sem estar aprovado em `fornecedores_master.csv`.
+4. O **site** é a unidade de execução — um processo por domínio, sempre.
+5. Coleta e montagem são programas separados.
+6. `id_item` é **texto**, nunca int (`U001`, `G008`, `318N`).
+7. Máximo 3 requisições simultâneas por domínio.
+8. Cinco linhas não são cinco fornecedores: a entrega pede 5 **domínios
    distintos**, cada um com preço e print. Quem não tem os dois vai para
    `data/interim/reserva.csv` com o motivo.
-8. A embalagem faz parte do item. Uma máscara avulsa não atende quem pediu
+9. A embalagem faz parte do item. Uma máscara avulsa não atende quem pediu
    pacote com 100, e o preço de um kit não vale numa linha de 1 unidade.
 
 ## Como contribuir
