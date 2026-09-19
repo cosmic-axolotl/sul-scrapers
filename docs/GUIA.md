@@ -93,6 +93,10 @@ Sobre trabalhar no repositório: Codex (dentro do ChatGPT) e Jules (do Google) c
 
 A estrutura completa, com diagramas, está no documento Estrutura do Repositório, e a versão exportada dele vive em docs/ESTRUTURA.md.
 
+![O pipeline inteiro, do que a prospecção encontra até as sete planilhas da entrega.](img/01-fluxo-de-dados.png)
+
+*O pipeline inteiro, do que a prospecção encontra até as sete planilhas da entrega.*
+
 ### O contrato de dados (o entregável desta etapa)
 
 Cinco dataclasses, num único arquivo, que ninguém altera sem avisar no grupo. A fonte real é src/models.py — em caso de divergência, vale o arquivo:
@@ -231,6 +235,10 @@ A pendência dos pneus. Os 2 itens de VEICULOS precisam de distribuidora de auto
 5. Testar entrega no Sul. Três CEPs representativos, um por estado, batidos contra a calculadora de frete da loja: Curitiba/PR 80010-010, Florianópolis/SC 88010-400, Porto Alegre/RS 90010-150. Em plataforma conhecida isso é uma chamada de API (ver Etapa 2). Este é o ponto mais lento da Etapa 1 — por isso vem depois do filtro de CNAE, rodando só sobre quem já passou, e só quando se pede: python -m src.runners.etapa1_validar --com-frete.
 
 É aqui que o fornecedor de fora do eixo é aprovado ou reprovado, e a distinção que o código faz importa: a loja RECUSAR o CEP é diferente de não dar para cotar. Recusa nas três UFs reprova; falha técnica deixa PENDENTE, com a UF de fora do registro em vez de gravada como "não entrega". Sem isso, um site fora do ar numa tarde sairia da lista por engano, e ninguém saberia por quê.
+
+![Da planilha de leads ao fornecedor aprovado, e o que decide cada um dos três status.](img/03-pipeline-etapa1.png)
+
+*Da planilha de leads ao fornecedor aprovado, e o que decide cada um dos três status.*
 
 ### O problema dos status livres
 
@@ -383,6 +391,10 @@ Na prática: use matching.avaliar(), que devolve score E decisão. matching.pont
 
 Guardar o score na planilha importa: no fim da semana, quando faltar tempo, ele diz onde olhar primeiro.
 
+![Onde um produto é aceito, mandado para revisão ou descartado. Divergir custa: não basta deixar de ganhar bônus.](img/04-funil-matching.png)
+
+*Onde um produto é aceito, mandado para revisão ou descartado. Divergir custa: não basta deixar de ganhar bônus.*
+
 ### A saída da Etapa 2
 
 Dois arquivos, um para gente ler e um para a máquina consumir.
@@ -487,6 +499,10 @@ Por ser independente, ele pode rodar a qualquer momento, inclusive com a coleta 
 Quando sobram mais de 5. Cinco registros não são cinco fornecedores, e essa distinção custou uma correção: ordenar e cortar em cinco entregava, com facilidade, cinco linhas do mesmo domínio, todas sem preço, enquanto um candidato com preço ficava na reserva. O corte hoje é em três tempos: descarta o que não serve (sem preço, sem print, print fora do disco, frete em aberto, score abaixo do mínimo), garante um registro por domínio, e só então ordena por maior score_match e menor preço final.
 
 O resto vai para data/interim/reserva.csv com o motivo de cada exclusão — sem o motivo, "por que este fornecedor não entrou?" só se responde reprocessando tudo. A reserva é ferramenta interna: quando uma linha for reprovada na revisão, ela dá o substituto imediato, com URL e tudo, sem voltar ao site.
+
+![O corte em três tempos. Ordenar e cortar em cinco entregava cinco linhas do mesmo domínio, todas sem preço.](img/05-escolha-dos-cinco.png)
+
+*O corte em três tempos. Ordenar e cortar em cinco entregava cinco linhas do mesmo domínio, todas sem preço.*
 
 ### Dividir uma categoria entre várias máquinas
 
