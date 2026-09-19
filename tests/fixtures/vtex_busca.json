@@ -1,0 +1,79 @@
+[
+  {
+    "productId": "1001",
+    "productName": "Tábua de Corte Polietileno",
+    "link": "https://loja-exemplo.com.br/tabua-de-corte-polietileno/p",
+    "linkText": "tabua-de-corte-polietileno",
+    "items": [
+      {
+        "itemId": "5001",
+        "name": "30 cm",
+        "nameComplete": "Tábua de Corte Polietileno 30 cm",
+        "sellers": [
+          {
+            "sellerId": "1",
+            "sellerName": "Loja Exemplo",
+            "sellerDefault": true,
+            "commertialOffer": {
+              "Price": 39.9,
+              "ListPrice": 49.9,
+              "PriceWithoutDiscount": 49.9,
+              "AvailableQuantity": 120
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "5002",
+        "name": "50 cm",
+        "nameComplete": "Tábua de Corte Polietileno 50 cm",
+        "sellers": [
+          {
+            "sellerId": "marketplace-x",
+            "sellerName": "Parceiro X",
+            "sellerDefault": false,
+            "commertialOffer": {
+              "Price": 71.5,
+              "ListPrice": 71.5,
+              "AvailableQuantity": 0
+            }
+          },
+          {
+            "sellerId": "1",
+            "sellerName": "Loja Exemplo",
+            "sellerDefault": true,
+            "commertialOffer": {
+              "Price": 68.0,
+              "ListPrice": 89.9,
+              "AvailableQuantity": 15
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "productId": "1002",
+    "productName": "Máscara Descartável TNT",
+    "link": "https://loja-exemplo.com.br/mascara-descartavel-tnt/p",
+    "linkText": "mascara-descartavel-tnt",
+    "items": [
+      {
+        "itemId": "5100",
+        "name": "Pacote com 100 unidades",
+        "nameComplete": "Máscara Descartável TNT Pacote com 100 unidades",
+        "sellers": [
+          {
+            "sellerId": "1",
+            "sellerDefault": true,
+            "commertialOffer": {
+              "Price": 24.9,
+              "ListPrice": 0,
+              "AvailableQuantity": 300
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
