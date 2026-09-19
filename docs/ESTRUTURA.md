@@ -25,6 +25,10 @@ AGENTS.md é a fonte única. É um formato aberto, mantido pela Agentic AI Found
 
 A regra que evita o problema clássico: se você editar CLAUDE.md ou GEMINI.md, você criou uma divergência. Em uma semana os dois arquivos discordam e ninguém sabe qual está certo. Todo conteúdo novo vai para AGENTS.md.
 
+![Uma fonte única e dois ponteiros. Editar CLAUDE.md ou GEMINI.md cria uma divergência que ninguém percebe até os arquivos discordarem.](img/07-arquivos-de-instrucao.png)
+
+*Uma fonte única e dois ponteiros. Editar CLAUDE.md ou GEMINI.md cria uma divergência que ninguém percebe até os arquivos discordarem.*
+
 ### O que vai dentro do AGENTS.md
 
 Não é um resumo do projeto — para isso existe o guia da equipe. É o conjunto de coisas que um assistente precisa saber para não escrever código errado:
@@ -179,6 +183,10 @@ O repositório tem uma regra de ouro que explica quase toda a estrutura: um arqu
 
 A escrita é atômica onde importa: os CSV compartilhados são gerados num arquivo temporário e trocados no fim, para que uma interrupção no meio não deixe o arquivo pela metade. O .jsonl da coleta é a exceção deliberada — ele é gravado linha a linha, conforme coleta, porque a retomada depende de o que já está no disco ser verdade.
 
+![O caminho completo dos dados: cada script e o arquivo que ele escreve. Um arquivo por site na entrada e na saída.](img/01-fluxo-de-dados.png)
+
+*O caminho completo dos dados: cada script e o arquivo que ele escreve. Um arquivo por site na entrada e na saída.*
+
 ### As duas fases leem planos diferentes
 
 A varredura descobre quem vende o quê; a coleta usa essa descoberta. Elas não podem ler o mesmo arquivo, senão nenhuma roda numa base nova — foi um problema real do projeto, e a separação é o que o resolve.
@@ -190,6 +198,10 @@ A varredura descobre quem vende o quê; a coleta usa essa descoberta. Elas não 
 | etapa2_plano | achados/*.csv + fornecedores_master.csv | plano_coleta.csv, revisar.csv, cobertura_*.xlsx |
 | coleta | plano_coleta.csv (quais itens) + achados/{dominio}.csv (a URL) | coletas/{dominio}.jsonl + prints/ |
 | montar_entrega | coletas/*.jsonl + itens.csv + fornecedores_master.csv | {CATEGORIA}.xlsx, reserva.csv, pendencias.csv |
+
+![Por que varredura e coleta não podem ler o mesmo arquivo.](img/02-dois-planos.png)
+
+*Por que varredura e coleta não podem ler o mesmo arquivo.*
 
 ### A entrada humana: data/raw/leads/
 
@@ -252,6 +264,10 @@ A estrutura foi desenhada para que nove pessoas trabalhem em paralelo sem colidi
 | core/frete.py, export/* | Frente F | — |
 | core/http.py, core/log.py, core/tabelas.py, orquestrador.py | Frente A | Todos |
 | tests/ | Quem escreve o código testado | Todos |
+
+![Quem mexe em quê, e as duas fronteiras que permitem nove pessoas em paralelo sem colidir.](img/06-modulos-e-fronteiras.png)
+
+*Quem mexe em quê, e as duas fronteiras que permitem nove pessoas em paralelo sem colidir.*
 
 Duas fronteiras que sustentam essa divisão:
 
