@@ -28,7 +28,7 @@ COLUNAS_FORNECEDOR = [
     "dominio", "nome", "url_base", "uf", "cnpj", "cnae_principal",
     "cnaes_secundarios", "situacao_cadastral", "eh_atacadista",
     "flag_atacarejo", "entrega_sul", "plataforma", "modo_frete",
-    "status", "motivo",
+    "status", "motivo", "origem",
 ]
 
 
@@ -162,6 +162,10 @@ def ler_fornecedores(
                 modo_frete=_modo_frete(linha.get("modo_frete")),
                 status=status,
                 motivo=(linha.get("motivo") or "").strip(),
+                origem=[
+                    o.strip() for o in (linha.get("origem") or "").split("|")
+                    if o.strip()
+                ],
             )
     return fornecedores
 
@@ -194,6 +198,7 @@ def gravar_fornecedores(
                 "modo_frete": str(forn.modo_frete or ""),
                 "status": str(forn.status),
                 "motivo": forn.motivo,
+                "origem": "|".join(forn.origem),
             })
 
     os.replace(temporario, caminho)

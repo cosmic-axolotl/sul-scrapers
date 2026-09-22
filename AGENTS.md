@@ -47,6 +47,7 @@ class Fornecedor:
     modo_frete: ModoFrete | None
     status: Status            # APROVADO | REPROVADO | PENDENTE
     motivo: str
+    origem: list[str]         # ["lista_sites.xlsx :: EPI"] -- arquivo/aba de onde veio
 
 @dataclass
 class ProdutoBruto:           # UMA VARIAÇÃO, não um produto
@@ -83,9 +84,10 @@ continua construindo estes objetos do mesmo jeito.
 
 ```
 planilhas originais  -> data/raw/
-leads da prospecção  -> data/raw/leads/*.csv|xlsx             (formato livre)
+leads da prospecção  -> data/raw/leads/*.csv|xlsx             (formato livre, TODAS as abas)
 etapa1_validar       -> data/interim/fornecedores_master.csv
                         data/interim/sem_site.csv              (CNPJ sem domínio)
+                        data/output/validacao_{arquivo}_{aba}.xlsx  (conferência humana)
 etapa2_varredura     -> data/interim/achados/{dominio}.csv     (--site ou --categoria)
 etapa2_plano         -> data/interim/plano_coleta.csv          (site -> itens que ele tem)
                         data/interim/revisar.csv               (match duvidoso)
@@ -131,6 +133,29 @@ Arquivo sem nenhuma coluna de site **levanta `PlanilhaSemColunaDeSite`**,
 nomeando o arquivo, as colunas que ele tem e as que se esperava. Isso é
 deliberado: antes, coluna com outro nome dava zero fornecedores sem erro
 nenhum, e a pessoa ia procurar defeito no CNPJ ou na rede.
+
+**Todas as abas de um `.xlsx` são lidas, não só a primeira.** Ler só a
+primeira escondia 122 dos 134 fornecedores de `lista_sites.xlsx` (seis
+abas: EPI, UNIFORME, COMBUSTIVEL, VEÍCULOS, Utensílios, Equipamentos)
+sem erro nenhum — o mesmo prejuízo que `PlanilhaSemColunaDeSite` existe
+para impedir. Cada aba escolhe suas colunas sozinha: em `lista_sites.xlsx`
+a aba Utensílios usa `URL` e as outras usam `Site`. Aba **vazia** é
+ignorada em silêncio (capa, legenda, rascunho); aba **com linhas e sem
+coluna de site** levanta a exceção, nomeando arquivo e aba.
+
+Cada fornecedor guarda em `origem` de que arquivo e aba veio, e um site
+que aparece em duas abas guarda as duas. É o que permite devolver uma
+planilha de conferência por aba em `data/output/validacao_*.xlsx`
+(`src/export/validacao_por_aba.py`, que a etapa 1 chama no fim e também
+roda sozinho sobre o master).
+
+A coluna de UF costuma vir como `Cidade / UF` — o campo guarda só a
+sigla (`São José / SC` -> `SC`). Texto sem sigla reconhecível (`Paraná`)
+passa como está.
+
+Mesmo domínio com CNPJ diferente (as cinco linhas de `consigaz.com.br`
+são cinco revendas) **não** vira cinco fornecedores: a chave é o
+domínio, só o primeiro CNPJ é consultado, e a etapa avisa no log.
 
 Lead nunca sobrescreve o que as duas bases já resolveram — ele só
 preenche buraco (nome ou UF em branco) e acrescenta domínio novo. Todo

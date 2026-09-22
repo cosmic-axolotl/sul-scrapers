@@ -1,7 +1,9 @@
 """Etapa 1 — transforma candidatos em fornecedores aprovados ou reprovados.
 
 Entrada:  data/raw/*.xlsx (as duas planilhas) + leads da prospecção
+          (todo .csv/.xlsx de data/raw/leads/, TODAS as abas de cada um)
 Saída:    data/interim/fornecedores_master.csv
+          data/output/validacao_{arquivo}_{aba}.xlsx  (uma por aba de origem)
 
 Roda em lote, é rápida em máquina, e não termina num dia: a frente de
 prospecção continua alimentando a entrada até o fim do projeto.
@@ -17,6 +19,7 @@ from src.core.http import Cliente, ErroHTTP, normalizar_dominio
 from src.core.log import obter
 from src.core.plataforma import detectar
 from src.core.tabelas import gravar_fornecedores, ler_fornecedores
+from src.export import validacao_por_aba
 from src.models import Fornecedor, Status
 from src.validacao.classificar_cnae import decidir
 from src.validacao.consultar_cnpj import consultar, normalizar
@@ -60,6 +63,12 @@ MAPA_STATUS_LEGADO = {
 
 UFS_SUL = ("PR", "SC", "RS")
 
+UFS_BR = frozenset((
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+    "SP", "SE", "TO",
+))
+
 
 def _status_legado(texto: str) -> Status:
     """"EXCLUÍDO - ECOMMERCE", "PENDENTE SITE", "APROVADO ESTRITO"...
@@ -96,12 +105,16 @@ def _sim(valor) -> bool | None:
 
 
 class PlanilhaSemColunaDeSite(ValueError):
-    """Planilha de lead sem nenhuma coluna reconhecível de site.
+    """Aba de lead com linhas, mas sem nenhuma coluna de site.
 
     É exceção, e não um aviso, de propósito. Antes desta classe existir,
     uma planilha com a coluna chamada "URL" em vez de "Site Oficial"
     produzia zero fornecedores sem erro nenhum: a pessoa rodava a etapa,
     via "0 aprovados" e ia procurar defeito no CNPJ ou na rede.
+
+    Vale por ABA, não por arquivo: numa planilha de seis abas, cinco
+    lidas e uma ignorada em silêncio dão o mesmo tipo de prejuízo. Aba
+    vazia não conta -- ela não tem lead para perder.
     """
 
 
@@ -133,20 +146,64 @@ def achar_coluna(colunas, sinonimos: set[str]) -> str | None:
     return None
 
 
-def _ler_tabela(arquivo: Path):
-    """CSV ou XLSX, primeira aba, tudo como texto."""
+def nome_origem(arquivo: Path, aba: str = "") -> str:
+    """Rótulo estável de onde a linha veio: "lista_sites.xlsx :: EPI".
+
+    É o que liga o fornecedor no master à aba que o trouxe, e o que a
+    planilha de conferência usa para se nomear. CSV não tem aba, então
+    fica só o nome do arquivo.
+    """
+    return f"{arquivo.name} :: {aba}" if aba else arquivo.name
+
+
+def _sigla_uf(texto: str) -> str:
+    """Tira a UF de um texto livre: "São José / SC" -> "SC".
+
+    A coluna da prospecção costuma ser "Cidade / UF", e o sinônimo "uf"
+    casa com ela -- sem isto o campo virava "SÃO JOSÉ/SC" e a planilha
+    de conferência saía com cidade dentro da coluna de estado.
+
+    Texto sem sigla reconhecível volta como estava (em maiúsculas): é o
+    comportamento antigo, e "Paraná" por extenso ainda diz algo a quem
+    lê. A última sigla ganha, porque "Cidade / UF" termina na UF.
+    """
+    limpo = texto.strip().upper()
+    encontradas = [p for p in re.split(r"[^A-Za-zÀ-Ü]+", limpo) if p in UFS_BR]
+    return encontradas[-1] if encontradas else limpo
+
+
+def _ler_csv(arquivo: Path):
+    """CSV com o separador que vier: ',' , ';' (Excel pt-BR) ou tab."""
+    import pandas as pd
+
+    for separador in (",", ";", "\t"):
+        try:
+            df = pd.read_csv(arquivo, sep=separador, dtype=str)
+        except Exception:  # noqa: PERF203
+            continue
+        if len(df.columns) > 1 or separador == "\t":
+            return df
+    return pd.read_csv(arquivo, dtype=str)
+
+
+def _ler_tabelas(arquivo: Path) -> list[tuple[str, object]]:
+    """[(nome da aba, tabela)] -- TODAS as abas, tudo como texto.
+
+    Ler só a primeira aba era silêncio caro: `lista_sites.xlsx` tem seis
+    (EPI, UNIFORME, COMBUSTIVEL, VEÍCULOS, Utensílios, Equipamentos) e o
+    pipeline enxergava 12 das 134 empresas, sem erro nenhum -- o mesmo
+    defeito que `PlanilhaSemColunaDeSite` existe para impedir, só que uma
+    camada abaixo.
+
+    O nome da aba não é decoração: ele vira a `origem` do fornecedor e o
+    nome da planilha de conferência que a etapa devolve no fim.
+    """
     import pandas as pd
 
     if arquivo.suffix.lower() == ".csv":
-        for separador in (",", ";", "\t"):
-            try:
-                df = pd.read_csv(arquivo, sep=separador, dtype=str)
-            except Exception:  # noqa: PERF203
-                continue
-            if len(df.columns) > 1 or separador == "\t":
-                return df
-        return pd.read_csv(arquivo, dtype=str)
-    return pd.read_excel(arquivo, sheet_name=0, dtype=str)
+        return [("", _ler_csv(arquivo))]
+
+    return list(pd.read_excel(arquivo, sheet_name=None, dtype=str).items())
 
 
 def ler_leads(pasta: Path = LEADS) -> list[Fornecedor]:
@@ -175,49 +232,59 @@ def ler_leads(pasta: Path = LEADS) -> list[Fornecedor]:
 
     for arquivo in arquivos:
         try:
-            df = _ler_tabela(arquivo)
+            tabelas = _ler_tabelas(arquivo)
         except Exception as e:
             problemas.append(f"{arquivo.name}: não consegui ler ({type(e).__name__}: {e})")
             continue
 
-        coluna_site = achar_coluna(df.columns, SINONIMOS_SITE)
-        if coluna_site is None:
-            problemas.append(
-                f"{arquivo.name}: nenhuma coluna de site. "
-                f"Colunas encontradas: {list(df.columns)}. "
-                f"Esperava alguma com: {', '.join(sorted(SINONIMOS_SITE))}"
-            )
-            continue
+        for aba, df in tabelas:
+            origem = nome_origem(arquivo, aba)
 
-        coluna_nome = achar_coluna(df.columns, SINONIMOS_NOME)
-        coluna_uf = achar_coluna(df.columns, SINONIMOS_UF)
-        coluna_cnpj = achar_coluna(df.columns, SINONIMOS_CNPJ)
-
-        lidos = sem_dominio = 0
-        for _, linha in df.iterrows():
-            url = _texto(linha.get(coluna_site))
-            dominio = normalizar_dominio(url)
-            if not dominio:
-                sem_dominio += 1
+            # Aba vazia é capa, rascunho ou sobra do Excel -- não é lead
+            # perdido, e transformar isso em erro pararia a etapa inteira
+            # por causa de uma planilha em branco.
+            if df.empty:
                 continue
-            leads.append(Fornecedor(
-                nome=_texto(linha.get(coluna_nome)) if coluna_nome else "",
-                dominio=dominio,
-                url_base=url if url.startswith("http") else f"https://{dominio}",
-                uf=(_texto(linha.get(coluna_uf)).upper() if coluna_uf else ""),
-                cnpj=(_digitos(_texto(linha.get(coluna_cnpj))) or None
-                      if coluna_cnpj else None),
-                status=Status.PENDENTE,
-                motivo=f"lead de {arquivo.name}",
-            ))
-            lidos += 1
 
-        log.info("%s: %d leads pela coluna %r%s", arquivo.name, lidos, coluna_site,
-                 f" ({sem_dominio} linhas sem site)" if sem_dominio else "")
+            coluna_site = achar_coluna(df.columns, SINONIMOS_SITE)
+            if coluna_site is None:
+                problemas.append(
+                    f"{origem}: nenhuma coluna de site. "
+                    f"Colunas encontradas: {list(df.columns)}. "
+                    f"Esperava alguma com: {', '.join(sorted(SINONIMOS_SITE))}"
+                )
+                continue
+
+            coluna_nome = achar_coluna(df.columns, SINONIMOS_NOME)
+            coluna_uf = achar_coluna(df.columns, SINONIMOS_UF)
+            coluna_cnpj = achar_coluna(df.columns, SINONIMOS_CNPJ)
+
+            lidos = sem_dominio = 0
+            for _, linha in df.iterrows():
+                url = _texto(linha.get(coluna_site))
+                dominio = normalizar_dominio(url)
+                if not dominio:
+                    sem_dominio += 1
+                    continue
+                leads.append(Fornecedor(
+                    nome=_texto(linha.get(coluna_nome)) if coluna_nome else "",
+                    dominio=dominio,
+                    url_base=url if url.startswith("http") else f"https://{dominio}",
+                    uf=(_sigla_uf(_texto(linha.get(coluna_uf))) if coluna_uf else ""),
+                    cnpj=(_digitos(_texto(linha.get(coluna_cnpj))) or None
+                          if coluna_cnpj else None),
+                    status=Status.PENDENTE,
+                    motivo=f"lead de {origem}",
+                    origem=[origem],
+                ))
+                lidos += 1
+
+            log.info("%s: %d leads pela coluna %r%s", origem, lidos, coluna_site,
+                     f" ({sem_dominio} linhas sem site)" if sem_dominio else "")
 
     if problemas:
         raise PlanilhaSemColunaDeSite(
-            "não consegui usar {} arquivo(s) de {}:\n  - {}".format(
+            "não consegui usar {} entrada(s) de {}:\n  - {}".format(
                 len(problemas), pasta, "\n  - ".join(problemas)
             )
         )
@@ -262,6 +329,7 @@ def unificar_planilhas(
                 uf=_texto(linha.get("Estado")).upper(),
                 status=Status.PENDENTE,
                 motivo="lead da base regional; falta CNPJ",
+                origem=[nome_origem(base_sul)],
             )
     else:
         log.warning("%s nao encontrada", base_sul)
@@ -304,6 +372,8 @@ def unificar_planilhas(
                 motivo=" | ".join(
                     p for p in (legado, _texto(linha.get("Motivo / observação"))) if p
                 ),
+                origem=sorted({nome_origem(base_atacadistas),
+                               *(existente.origem if existente else [])}),
             )
             por_dominio[dominio] = forn
     else:
@@ -330,7 +400,18 @@ def unificar_planilhas(
             continue
         existente.nome = existente.nome or lead.nome
         existente.uf = existente.uf or lead.uf
+        if existente.cnpj and lead.cnpj and existente.cnpj != lead.cnpj:
+            # Mesmo site, CNPJ diferente: são filiais do mesmo grupo (as
+            # cinco linhas de consigaz.com.br em COMBUSTIVEL são cinco
+            # revendas). A chave do projeto é o domínio, então só o
+            # primeiro CNPJ é consultado -- o aviso existe para que isso
+            # não apareça como surpresa na conferência.
+            log.warning("%s tambem chegou com o CNPJ %s; so o %s foi consultado",
+                        lead.dominio, lead.cnpj, existente.cnpj)
         existente.cnpj = existente.cnpj or lead.cnpj
+        for origem in lead.origem:
+            if origem not in existente.origem:
+                existente.origem.append(origem)
 
     if novos:
         log.info("%d dominios novos vieram de %s", novos, pasta_leads)
@@ -464,7 +545,8 @@ def testar_entrega(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
     return decidir_entrega(fornecedor)
 
 
-def main(com_frete: bool = False, retomar: bool = True) -> list[Fornecedor]:
+def main(com_frete: bool = False, retomar: bool = True,
+         por_aba: bool = True) -> list[Fornecedor]:
     fornecedores = unificar_planilhas()
 
     # Retomar aproveita CNPJ e CNAE já resolvidos numa execução anterior:
@@ -500,6 +582,12 @@ def main(com_frete: bool = False, retomar: bool = True) -> list[Fornecedor]:
     print(f"{contagem[Status.APROVADO]} aprovados, "
           f"{contagem[Status.PENDENTE]} pendentes, "
           f"{contagem[Status.REPROVADO]} reprovados -> {SAIDA}")
+
+    # O master é para o pipeline; quem prospectou confere na própria aba.
+    if por_aba:
+        for caminho in validacao_por_aba.gerar(fornecedores):
+            print(f"  conferência: {caminho}")
+
     return fornecedores
 
 
@@ -509,9 +597,12 @@ if __name__ == "__main__":
                    help="também testa entrega nos 3 CEPs (lento)")
     p.add_argument("--do-zero", action="store_true",
                    help="ignora o master anterior e reconsulta todos os CNPJ")
+    p.add_argument("--sem-planilhas", action="store_true",
+                   help="não gera as planilhas de conferência por aba")
     a = p.parse_args()
     try:
-        main(com_frete=a.com_frete, retomar=not a.do_zero)
+        main(com_frete=a.com_frete, retomar=not a.do_zero,
+             por_aba=not a.sem_planilhas)
     except PlanilhaSemColunaDeSite as e:
         # Problema de arquivo de entrada, não defeito de código: a
         # mensagem já diz qual planilha e quais colunas ela tem.

@@ -81,6 +81,12 @@ class Fornecedor:
     modo_frete: ModoFrete | None = None
     status: Status = Status.PENDENTE
     motivo: str = ""
+    # De onde este fornecedor veio: "lista_sites.xlsx :: EPI", uma
+    # entrada por arquivo/aba de origem. É lista porque o mesmo site
+    # aparece em mais de uma aba (astrodistribuidora.com está em EPI e
+    # em UNIFORME) e a conferência por aba precisa dele nas duas.
+    # Referência para humano; nada no pipeline decide por este campo.
+    origem: list[str] = field(default_factory=list)
 
 
 @dataclass

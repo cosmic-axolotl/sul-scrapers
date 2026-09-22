@@ -165,6 +165,134 @@ def test_pasta_vazia_nao_e_erro(pasta):
 
 
 # ---------------------------------------------------------------------------
+# Abas: o segundo erro silencioso
+# ---------------------------------------------------------------------------
+
+def escrever_abas(pasta, nome: str, abas: dict[str, dict]):
+    """Um .xlsx com várias abas, como a prospecção entrega de verdade."""
+    caminho = pasta / nome
+    with pd.ExcelWriter(caminho) as escritor:
+        for aba, dados in abas.items():
+            pd.DataFrame(dados).to_excel(escritor, sheet_name=aba, index=False)
+    return caminho
+
+
+def test_le_todas_as_abas_nao_so_a_primeira(pasta):
+    """O defeito: lista_sites.xlsx tinha 6 abas e o pipeline via 1."""
+    escrever_abas(pasta, "lista_sites.xlsx", {
+        "EPI": {"Site": ["epi.com.br"]},
+        "UNIFORME": {"Site": ["uniforme.com.br"]},
+        "Utensílios": {"URL": ["utensilios.com.br"]},
+    })
+
+    leads = ler_leads(pasta)
+
+    assert {l.dominio for l in leads} == {
+        "epi.com.br", "uniforme.com.br", "utensilios.com.br",
+    }
+
+
+def test_cada_aba_pode_ter_nome_de_coluna_proprio(pasta):
+    """Em lista_sites.xlsx a aba Utensílios usa "URL"; as outras, "Site"."""
+    escrever_abas(pasta, "leads.xlsx", {
+        "A": {"Empresa": ["Alfa"], "Site": ["alfa.com.br"]},
+        "B": {"Nome fantasia": ["Beta"], "URL": ["beta.com.br"]},
+    })
+
+    leads = {l.dominio: l for l in ler_leads(pasta)}
+
+    assert leads["alfa.com.br"].nome == "Alfa"
+    assert leads["beta.com.br"].nome == "Beta"
+
+
+def test_lead_carrega_o_arquivo_e_a_aba_de_onde_veio(pasta):
+    escrever_abas(pasta, "lista_sites.xlsx", {"EPI": {"Site": ["alfa.com.br"]}})
+
+    [lead] = ler_leads(pasta)
+
+    assert lead.origem == ["lista_sites.xlsx :: EPI"]
+
+
+def test_csv_tem_origem_sem_aba(pasta):
+    escrever(pasta, "prospeccao.csv", {"site": ["alfa.com.br"]})
+
+    [lead] = ler_leads(pasta)
+
+    assert lead.origem == ["prospeccao.csv"]
+
+
+def test_aba_vazia_nao_derruba_a_leitura(pasta):
+    """Capa, legenda e rascunho são comuns e não têm lead a perder."""
+    escrever_abas(pasta, "leads.xlsx", {
+        "EPI": {"Site": ["alfa.com.br"]},
+        "Rascunho": {},
+    })
+
+    assert [l.dominio for l in ler_leads(pasta)] == ["alfa.com.br"]
+
+
+def test_aba_com_linhas_e_sem_coluna_de_site_levanta_erro(pasta):
+    """Uma aba ignorada em silêncio custa o mesmo que um arquivo inteiro."""
+    escrever_abas(pasta, "leads.xlsx", {
+        "EPI": {"Site": ["alfa.com.br"]},
+        "UNIFORME": {"Empresa": ["Beta"], "Telefone": ["41 3333-3333"]},
+    })
+
+    with pytest.raises(PlanilhaSemColunaDeSite) as erro:
+        ler_leads(pasta)
+
+    assert "leads.xlsx :: UNIFORME" in str(erro.value)
+    assert "Telefone" in str(erro.value)
+
+
+def test_site_em_duas_abas_guarda_as_duas_origens(pasta, tmp_path):
+    """astrodistribuidora.com está em EPI e em UNIFORME."""
+    escrever_abas(pasta, "lista_sites.xlsx", {
+        "EPI": {"Site": ["astro.com.br"]},
+        "UNIFORME": {"Site": ["https://www.astro.com.br/"]},
+    })
+
+    [forn] = unificar_planilhas(
+        base_sul=tmp_path / "x.xlsx",
+        base_atacadistas=tmp_path / "y.xlsx",
+        pasta_leads=pasta,
+    )
+
+    assert forn.origem == [
+        "lista_sites.xlsx :: EPI", "lista_sites.xlsx :: UNIFORME",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# UF
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(("valor", "esperado"), [
+    ("São José/SC", "SC"),
+    ("BLUMENAU - SC", "SC"),
+    ("Novo Hamburgo / RS", "RS"),
+    ("pr", "PR"),
+    ("SP", "SP"),
+])
+def test_coluna_cidade_uf_devolve_so_a_sigla(pasta, valor, esperado):
+    """O sinônimo "uf" casa com "Cidade / UF" -- e trazia a cidade junto."""
+    escrever(pasta, "leads.csv", {"Site": ["alfa.com.br"], "Cidade / UF": [valor]})
+
+    [lead] = ler_leads(pasta)
+
+    assert lead.uf == esperado
+
+
+def test_estado_por_extenso_continua_passando_como_estava(pasta):
+    """Não reconhecer não é motivo para apagar: o texto ainda informa."""
+    escrever(pasta, "leads.csv", {"Site": ["alfa.com.br"], "Estado": ["Paraná"]})
+
+    [lead] = ler_leads(pasta)
+
+    assert lead.uf == "PARANÁ"
+
+
+# ---------------------------------------------------------------------------
 # O erro que antes era silencioso
 # ---------------------------------------------------------------------------
 
