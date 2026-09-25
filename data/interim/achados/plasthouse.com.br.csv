@@ -1,0 +1,19 @@
+id_item,dominio,url_produto,titulo_encontrado,score_match,preco_indicativo,coletado_em,classificacao,motivo_match,sku
+U003,plasthouse.com.br,https://plasthouse.com.br/produto/casa/lavanderia/bacias/bacia-plastica-80l-c-alca/,Bacia Plástica 80L c/ Alça,0.574,79.9,2026-09-22T15:06:06,revisar,volume pedida [50.0] e o produto traz [80.0],BC80AL
+U004,plasthouse.com.br,https://plasthouse.com.br/produto/casa/lavanderia/bacias/bacia-plastica-80l-c-alca/,Bacia Plástica 80L c/ Alça,0.574,79.9,2026-09-22T15:06:09,revisar,volume pedida [7.0] e o produto traz [80.0],BC80AL
+U005,plasthouse.com.br,https://plasthouse.com.br/produto/casa/lavanderia/bacias/bacia-plastica-80l-c-alca/,Bacia Plástica 80L c/ Alça,0.574,79.9,2026-09-22T15:06:14,revisar,volume pedida [20.0] e o produto traz [80.0],BC80AL
+U006,plasthouse.com.br,https://plasthouse.com.br/produto/casa/lavanderia/bacias/bacia-plastica-80l-c-alca/,Bacia Plástica 80L c/ Alça,0.574,79.9,2026-09-22T15:06:16,revisar,volume pedida [25.0] e o produto traz [80.0],BC80AL
+U007,plasthouse.com.br,https://plasthouse.com.br/produto/casa/lavanderia/bacias/bacia-quadrada-com-alca-18l-cipla/,Bacia Quadrada Com Alça 18L – Cipla,0.833,51.5,2026-09-22T15:06:24,aceito,,BACCIP18L
+U012,plasthouse.com.br,https://plasthouse.com.br/produto/casa/organizacao/caixa-organizadora-20l-com-trava-plasticos-mb/,Caixa Organizadora 20L com Trava – Plásticos MB,0.488,29.97,2026-09-22T15:07:04,revisar,volume pedida [38.0] e o produto traz [20.0],ORGMBP20L
+U013,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:17,aceito,,CXMR12
+U014,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:22,aceito,,CXMR12
+U015,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:25,aceito,,CXMR12
+U016,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:27,aceito,,CXMR12
+U017,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:29,aceito,,CXMR12
+U018,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:34,aceito,,CXMR12
+U019,plasthouse.com.br,https://plasthouse.com.br/produto/caixas/caixa-plastica-mr-12/,Caixa Plástica MR 12,0.659,19.9,2026-09-22T15:07:39,aceito,,CXMR12
+U041,plasthouse.com.br,https://plasthouse.com.br/produto/casa/espatula-raspadora-12cm-m-hercules/,Espátula Raspadora 12cm M – Hércules,0.505,12.9,2026-09-23T10:31:01,revisar,,
+U042,plasthouse.com.br,https://plasthouse.com.br/produto/casa/limpeza/super-rodo-c-espremedor/,Super Rodo c/ Espremedor,0.485,76.9,2026-09-23T10:31:47,revisar,,
+U044,plasthouse.com.br,https://plasthouse.com.br/produto/casa/cozinha/talheres/faca-para-legumes-mundial/,Faca para Legumes – Mondial,0.6,5.9,2026-09-22T15:11:45,revisar,,LEGMUNCOZ
+U055,plasthouse.com.br,https://plasthouse.com.br/produto/lixeiras/lixeira-basculante-50l/,Lixeira Basculante 50L,0.586,84.9,2026-09-22T15:12:56,revisar,,LIXBASC50CJ
+U066,plasthouse.com.br,https://plasthouse.com.br/produto/casa/banheiro/dispenser/dispenser-para-papel-toalha-goedert/,Dispenser Para Papel Toalha,0.565,34.5,2026-09-23T10:49:29,revisar,,

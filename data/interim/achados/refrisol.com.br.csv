@@ -1,0 +1,12 @@
+id_item,dominio,url_produto,titulo_encontrado,score_match,preco_indicativo,coletado_em,classificacao,motivo_match,sku
+U002,refrisol.com.br,https://www.refrisol.com.br/assadeira-lisa-58-x-70-x-35-aluminio-imeca/p,"Assadeira Lisa 58 x 70 x 3,5 Alumínio Imeca",0.655,,2026-09-22T14:31:19,aceito,,
+U043,refrisol.com.br,https://www.refrisol.com.br/faca-desossa-inox-lamina-curva-cabo-branco-profissional-6/p,"Faca Desossa Inox Lâmina Curva Cabo Branco Profissional Hercules Mundial 6""",0.599,,2026-09-22T15:04:18,revisar,comprimento pedida [0.325] e o produto traz [0.15239999999999998],
+U045,refrisol.com.br,https://www.refrisol.com.br/faca-para-pao-8-infinity-brinox/p,"Faca para Pão 8"" Infinity Brinox",0.486,,2026-09-23T10:25:42,revisar,,
+U046,refrisol.com.br,https://www.refrisol.com.br/tabua-de-corte-profissional-em-polipropileno-25-x-45-x-1-cm-bege-malta/p,Tábua de Corte Profissional em Polipropileno 25 x 45 x 1 cm Bege Malta,0.825,,2026-09-23T10:25:56,aceito,,
+U053,refrisol.com.br,https://www.refrisol.com.br/tabua-de-corte-38-x-50-cm-sincol/p,Tábua de Corte 38 x 50 cm Sincol,0.695,,2026-09-23T10:44:34,revisar,item exige [5] peças e o título do produto não diz quantas vêm,
+U057,refrisol.com.br,https://www.refrisol.com.br/panela-de-pressao-fechamento-externo-aluminio-5-litros-nacional/p,Panela De Pressão Fechamento Externo Alumínio 5 Litros Nacional,0.88,,2026-09-23T10:32:29,aceito,,
+U058,refrisol.com.br,https://www.refrisol.com.br/panela-de-pressao-fechamento-externo-aluminio-5-litros-nacional/p,Panela De Pressão Fechamento Externo Alumínio 5 Litros Nacional,0.659,,2026-09-23T10:33:42,revisar,volume pedida [10.0] e o produto traz [5.0],
+U059,refrisol.com.br,https://www.refrisol.com.br/panela-de-pressao-fechamento-externo-aluminio-20-litros-nacional/p,Panela De Pressão Fechamento Externo Alumínio 20 Litros Nacional,0.884,,2026-09-23T10:33:50,aceito,,
+U061,refrisol.com.br,https://www.refrisol.com.br/panela-de-pressao-fechamento-externo-aluminio-5-litros-nacional/p,Panela De Pressão Fechamento Externo Alumínio 5 Litros Nacional,0.659,,2026-09-22T15:13:37,revisar,volume pedida [30.0] e o produto traz [5.0],
+U062,refrisol.com.br,https://www.refrisol.com.br/panela-de-pressao-fechamento-externo-aluminio-5-litros-nacional/p,Panela De Pressão Fechamento Externo Alumínio 5 Litros Nacional,0.659,,2026-09-22T15:14:06,revisar,volume pedida [40.0] e o produto traz [5.0],
+U075,refrisol.com.br,https://www.refrisol.com.br/assadeira-lisa-58-x-70-x-35-aluminio-imeca/p,"Assadeira Lisa 58 x 70 x 3,5 Alumínio Imeca",0.655,,2026-09-22T14:31:27,aceito,,

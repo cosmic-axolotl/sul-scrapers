@@ -15,6 +15,7 @@ import csv
 import os
 from pathlib import Path
 
+from src.core.busca import molde_de_busca, seletor_de_busca
 from src.core.http import normalizar_dominio
 from src.core.log import obter
 from src.models import Fornecedor, Item, ModoFrete, Plataforma, Status
@@ -28,7 +29,7 @@ COLUNAS_FORNECEDOR = [
     "dominio", "nome", "url_base", "uf", "cnpj", "cnae_principal",
     "cnaes_secundarios", "situacao_cadastral", "eh_atacadista",
     "flag_atacarejo", "entrega_sul", "plataforma", "modo_frete",
-    "status", "motivo", "origem",
+    "status", "motivo", "origem", "url_busca", "seletor_busca",
 ]
 
 
@@ -166,6 +167,11 @@ def ler_fornecedores(
                     o.strip() for o in (linha.get("origem") or "").split("|")
                     if o.strip()
                 ],
+                # Normaliza na LEITURA: este CSV é editado à mão, e uma
+                # URL sem {termo} buscaria a mesma coisa nos 132 itens
+                # sem dar erro nenhum. Ver src/core/busca.py.
+                url_busca=molde_de_busca(linha.get("url_busca"), dominio),
+                seletor_busca=seletor_de_busca(linha.get("seletor_busca"), dominio),
             )
     return fornecedores
 
@@ -199,6 +205,8 @@ def gravar_fornecedores(
                 "status": str(forn.status),
                 "motivo": forn.motivo,
                 "origem": "|".join(forn.origem),
+                "url_busca": forn.url_busca,
+                "seletor_busca": forn.seletor_busca,
             })
 
     os.replace(temporario, caminho)

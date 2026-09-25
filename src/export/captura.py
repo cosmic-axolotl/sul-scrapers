@@ -44,8 +44,14 @@ class PrintIndisponivel(RuntimeError):
     """Não deu para tirar o print. O registro fica incompleto de propósito."""
 
 
-def _obter_navegador():
-    """Um browser por processo, aberto na primeira necessidade."""
+def obter_navegador():
+    """Um browser por processo, aberto na primeira necessidade.
+
+    Público porque a varredura genérica (`src/adapters/
+    generico_playwright.py`) usa o MESMO navegador: dois navegadores no
+    mesmo processo quebrariam a regra de um por domínio, e o print sairia
+    de uma sessão diferente da que fez a busca.
+    """
     global _navegador, _playwright
 
     if _navegador is not None:
@@ -103,7 +109,7 @@ def capturar(
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
 
-    navegador = _obter_navegador()
+    navegador = obter_navegador()
     contexto = navegador.new_context(
         viewport={"width": LARGURA, "height": ALTURA},
         locale="pt-BR",

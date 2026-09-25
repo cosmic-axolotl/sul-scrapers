@@ -37,6 +37,8 @@ MAX_PRODUTOS_DETALHADOS = 8
 class ShopifyExecutor(Executor):
     plataforma = "shopify"
 
+    SONDA = "{base}/search/suggest.json?q=a&resources[type]=product"
+
     def buscar(self, termo: str) -> list[ProdutoBruto]:
         base = self.fornecedor.url_base.rstrip("/")
         url = (f"{base}/search/suggest.json?q={quote(termo)}"

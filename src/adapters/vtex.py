@@ -48,6 +48,8 @@ CENTAVOS = 100.0
 class VtexExecutor(Executor):
     plataforma = "vtex"
 
+    SONDA = "{base}/api/catalog_system/pub/products/search?ft=a&_from=0&_to=0"
+
     # --- Etapa 2: varredura -------------------------------------------------
 
     def buscar(self, termo: str) -> list[ProdutoBruto]:
