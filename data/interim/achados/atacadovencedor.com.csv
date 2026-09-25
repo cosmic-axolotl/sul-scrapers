@@ -1,0 +1,6 @@
+id_item,dominio,url_produto,titulo_encontrado,score_match,preco_indicativo,coletado_em,classificacao,motivo_match,sku
+U023,atacadovencedor.com,https://www.atacadovencedor.com/caneca-natalina-ceramica-c-tampa-e-colher-300ml-26891-vencedor,Caneca Natalina Cerâmica C/ Tampa e Colher 300ml 26891 - Vencedor,0.486,39.99,2026-09-23T09:00:04,revisar,,
+U026,atacadovencedor.com,https://www.atacadovencedor.com/colher-de-servir-em-aco-inox-26cm-27385-vencedor,Colher de Servir em Aço Inox 26cm 27385 ? Vencedor,0.541,12.99,2026-09-23T09:02:09,revisar,comprimento pedida [0.5] e o produto traz [0.26],
+U067,atacadovencedor.com,https://www.atacadovencedor.com/kit-2-jogo-americano-retangular-preto-44-5x30cm-impermeavel-27270-vencedor,"Kit 2 Jogo Americano Retangular Preto 44,5x30cm Impermeável 27270 - Vencedor",0.487,62.76,2026-09-23T09:30:04,revisar,"item avulso, mas o produto vem em [2] peças",
+U068,atacadovencedor.com,https://www.atacadovencedor.com/ralador-manual-em-aco-inox-c-cabo-24696-23cm-vencedor,Ralador Manual em Aço Inox C/ Cabo 24696 23cm - Vencedor,0.504,9.99,2026-09-23T09:30:38,revisar,"comprimento pedida [0.106, 0.195] e o produto traz [0.23]",
+U080,atacadovencedor.com,https://www.atacadovencedor.com/organizacao/limpeza/pa-e-escova-de-limpeza-flow-ou,Pá e Escova de Limpeza Flow - Ou,0.574,49.99,2026-09-23T09:10:49,revisar,,

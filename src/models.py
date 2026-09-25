@@ -87,6 +87,15 @@ class Fornecedor:
     # em UNIFORME) e a conferência por aba precisa dele nas duas.
     # Referência para humano; nada no pipeline decide por este campo.
     origem: list[str] = field(default_factory=list)
+    # Como buscar NESTA loja, conferido à mão por alguém que abriu o
+    # site. Os dois são opcionais: sem eles, a varredura descobre
+    # sozinha (e erra em loja que responde 200 para tudo).
+    #   url_busca      "https://loja.com.br/busca?q={termo}"
+    #   seletor_busca  "#campo-busca" -- seletor CSS do campo
+    # Preenchido é ordem, não sugestão: a varredura usa e não procura
+    # mais nada. Quem conferiu viu a página; a heurística, não.
+    url_busca: str = ""
+    seletor_busca: str = ""
 
 
 @dataclass

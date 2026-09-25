@@ -15,12 +15,13 @@ import argparse
 import re
 from pathlib import Path
 
-from src.core.http import Cliente, ErroHTTP, normalizar_dominio
+from src.core.http import Cliente, ErroHTTP, SiteBloqueado, normalizar_dominio
 from src.core.log import obter
 from src.core.plataforma import detectar
+from src.core.busca import molde_de_busca, seletor_de_busca
 from src.core.tabelas import gravar_fornecedores, ler_fornecedores
 from src.export import validacao_por_aba
-from src.models import Fornecedor, Status
+from src.models import Fornecedor, Plataforma, Status
 from src.validacao.classificar_cnae import decidir
 from src.validacao.consultar_cnpj import consultar, normalizar
 from src.validacao.extrair_cnpj import extrair_do_site
@@ -50,6 +51,14 @@ SINONIMOS_NOME = {"nome", "empresa", "fornecedor", "razao", "estabelecimento"}
 SINONIMOS_UF = {"uf", "estado"}
 SINONIMOS_CNPJ = {"cnpj"}
 SINONIMOS_CIDADE = {"cidade", "municipio"}
+
+# Configuração de busca conferida à mão, uma linha por site. Estas duas
+# NÃO são reconhecidas por sinônimo solto: "URL de busca" tem a palavra
+# "url" e seria confundida com a coluna do site. A regra é composta --
+# o nome da coluna precisa ter uma palavra de cada grupo.
+PALAVRAS_BUSCA = {"busca", "buscar", "pesquisa", "pesquisar", "search"}
+PALAVRAS_ENDERECO = {"url", "link", "endereco", "rota", "caminho"}
+PALAVRAS_SELETOR = {"seletor", "selector", "css", "campo", "input"}
 
 # A planilha do colega tem 37 valores livres em "Status atual".
 # Isso é impossível de filtrar em código: mapeie para os três do enum
@@ -143,6 +152,21 @@ def achar_coluna(colunas, sinonimos: set[str]) -> str | None:
         if palavras & sinonimos:
             return coluna
 
+    return None
+
+
+def achar_coluna_composta(colunas, *grupos: set[str]) -> str | None:
+    """A coluna cujo nome tem uma palavra de CADA grupo.
+
+    "URL de busca" precisa casar com endereço E com busca; "Site" não
+    pode casar com nada disso. Sinônimo solto não serve aqui: a palavra
+    "url" sozinha é a coluna do site, e trocar as duas faria a varredura
+    tentar buscar na home de todo mundo.
+    """
+    for coluna in colunas:
+        palavras = {p for p in re.split(r"[^a-z0-9]+", _chave(coluna)) if p}
+        if all(palavras & grupo for grupo in grupos):
+            return coluna
     return None
 
 
@@ -246,7 +270,16 @@ def ler_leads(pasta: Path = LEADS) -> list[Fornecedor]:
             if df.empty:
                 continue
 
-            coluna_site = achar_coluna(df.columns, SINONIMOS_SITE)
+            # As colunas de configuração saem do bolo ANTES de procurar a
+            # do site: "URL de busca" não pode virar a coluna de site.
+            coluna_url_busca = achar_coluna_composta(
+                df.columns, PALAVRAS_ENDERECO, PALAVRAS_BUSCA)
+            coluna_seletor = achar_coluna_composta(
+                df.columns, PALAVRAS_SELETOR, PALAVRAS_BUSCA)
+            restantes = [c for c in df.columns
+                         if c not in (coluna_url_busca, coluna_seletor)]
+
+            coluna_site = achar_coluna(restantes, SINONIMOS_SITE)
             if coluna_site is None:
                 problemas.append(
                     f"{origem}: nenhuma coluna de site. "
@@ -255,9 +288,9 @@ def ler_leads(pasta: Path = LEADS) -> list[Fornecedor]:
                 )
                 continue
 
-            coluna_nome = achar_coluna(df.columns, SINONIMOS_NOME)
-            coluna_uf = achar_coluna(df.columns, SINONIMOS_UF)
-            coluna_cnpj = achar_coluna(df.columns, SINONIMOS_CNPJ)
+            coluna_nome = achar_coluna(restantes, SINONIMOS_NOME)
+            coluna_uf = achar_coluna(restantes, SINONIMOS_UF)
+            coluna_cnpj = achar_coluna(restantes, SINONIMOS_CNPJ)
 
             lidos = sem_dominio = 0
             for _, linha in df.iterrows():
@@ -269,18 +302,28 @@ def ler_leads(pasta: Path = LEADS) -> list[Fornecedor]:
                 leads.append(Fornecedor(
                     nome=_texto(linha.get(coluna_nome)) if coluna_nome else "",
                     dominio=dominio,
-                    url_base=url if url.startswith("http") else f"https://{dominio}",
+                    url_base=_raiz(url, dominio),
                     uf=(_sigla_uf(_texto(linha.get(coluna_uf))) if coluna_uf else ""),
                     cnpj=(_digitos(_texto(linha.get(coluna_cnpj))) or None
                           if coluna_cnpj else None),
                     status=Status.PENDENTE,
                     motivo=f"lead de {origem}",
                     origem=[origem],
+                    url_busca=(molde_de_busca(_texto(linha.get(coluna_url_busca)),
+                                              dominio)
+                               if coluna_url_busca else ""),
+                    seletor_busca=(seletor_de_busca(
+                        _texto(linha.get(coluna_seletor)), dominio)
+                        if coluna_seletor else ""),
                 ))
                 lidos += 1
 
-            log.info("%s: %d leads pela coluna %r%s", origem, lidos, coluna_site,
-                     f" ({sem_dominio} linhas sem site)" if sem_dominio else "")
+            configurados = sum(
+                1 for c in (coluna_url_busca, coluna_seletor) if c is not None)
+            log.info("%s: %d leads pela coluna %r%s%s", origem, lidos, coluna_site,
+                     f" ({sem_dominio} linhas sem site)" if sem_dominio else "",
+                     f"; busca configurada por {configurados} coluna(s)"
+                     if configurados else "")
 
     if problemas:
         raise PlanilhaSemColunaDeSite(
@@ -325,7 +368,7 @@ def unificar_planilhas(
             por_dominio[dominio] = Fornecedor(
                 nome=_texto(linha.get("Nome da Empresa")),
                 dominio=dominio,
-                url_base=url if url.startswith("http") else f"https://{dominio}",
+                url_base=_raiz(url, dominio),
                 uf=_texto(linha.get("Estado")).upper(),
                 status=Status.PENDENTE,
                 motivo="lead da base regional; falta CNPJ",
@@ -363,7 +406,7 @@ def unificar_planilhas(
             forn = Fornecedor(
                 nome=_texto(linha.get("Empresa")) or (existente.nome if existente else ""),
                 dominio=dominio,
-                url_base=url if url.startswith("http") else f"https://{dominio}",
+                url_base=_raiz(url, dominio),
                 uf=_texto(linha.get("UF")).upper() or (existente.uf if existente else ""),
                 cnpj=_digitos(_texto(linha.get("CNPJ"))) or None,
                 cnae_principal=_digitos(_texto(linha.get("CNAE principal"))) or None,
@@ -412,6 +455,11 @@ def unificar_planilhas(
         for origem in lead.origem:
             if origem not in existente.origem:
                 existente.origem.append(origem)
+        # Estas duas o lead SOBRESCREVE, ao contrário de todo o resto:
+        # quem preencheu abriu o site e conferiu, e é a informação mais
+        # nova que existe sobre como buscar ali.
+        existente.url_busca = lead.url_busca or existente.url_busca
+        existente.seletor_busca = lead.seletor_busca or existente.seletor_busca
 
     if novos:
         log.info("%d dominios novos vieram de %s", novos, pasta_leads)
@@ -431,17 +479,106 @@ def _gravar_sem_site(linhas: list[dict]) -> None:
         escritor.writerows(linhas)
 
 
+def _raiz(url: str, dominio: str) -> str:
+    """A raiz do site, não a página onde alguém achou o produto.
+
+    A prospecção cola o link que tinha na mão, e às vezes ele é fundo:
+    `https://consigaz.com.br/p13/`, `.../supergasbras/botijao-de-gas-p13`.
+    Tudo o que o pipeline monta depois pendura caminho em cima disso --
+    a busca vira `.../p13/busca?q=panela` e a API vira
+    `.../p13/wp-json/...`, as duas 404. Seis fornecedores aprovados
+    entraram assim na primeira varredura.
+
+    Mantém esquema e host como vieram, inclusive o `www.`, porque site
+    que redireciona para www responde 301 a mais sem ele, e hospedagem
+    que não tem o host sem www responde erro.
+    """
+    from urllib.parse import urlsplit
+
+    partes = urlsplit(url if url.startswith("http") else f"https://{dominio}")
+    if not partes.netloc:
+        return f"https://{dominio}"
+    return f"{partes.scheme}://{partes.netloc}"
+
+
 def _digitos(texto: str) -> str:
     return "".join(c for c in texto if c.isdigit())
 
 
-def validar(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
-    """Aplica o pipeline de validação a um fornecedor. Idempotente."""
+def _trocar_www(url: str) -> str:
+    """https://loja.com.br -> https://www.loja.com.br, e o contrário."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    partes = urlsplit(url)
+    host = partes.netloc
+    outro = host[4:] if host.startswith("www.") else f"www.{host}"
+    return urlunsplit(partes._replace(netloc=outro))
+
+
+def _serve_pagina(url: str, cliente: Cliente) -> bool:
+    """O endereço entrega a página? (2xx, depois de seguir redirects.)
+
+    Erro HTTP também conta como NÃO: um host que responde 403 ou 404 à
+    home existe, mas não serve para raspar. Cinco dos nove fornecedores
+    com o problema do www eram assim -- o endereço sem www respondia com
+    erro, e o com www entregava a loja. A primeira versão desta função
+    tratava "respondeu com erro" como "está certo, não mexa", e deixava
+    os cinco batendo na porta errada.
+    """
+    try:
+        cliente.get(url)
+        return True
+    except ErroHTTP:
+        return False
+
+
+def resolver_www(fornecedor: Fornecedor, cliente: Cliente) -> bool:
+    """Se o site não entrega a página, tenta a outra forma: com ou sem www.
+
+    Nove fornecedores aprovados estavam na planilha sem www e só
+    respondem com ele (frigo, primoequipamentos, satoatacado, ...): 0 de
+    3 tentativas como estavam, 3 de 3 com www. A varredura batia num
+    endereço que não servia e o site saía como "loja vazia".
+
+    Troca só quando o endereço atual NÃO entrega a página e o outro
+    entrega. Se os dois entregam, fica o da planilha; se nenhum entrega,
+    fica o da planilha também -- a troca não é palpite.
+
+    O domínio (a chave do projeto) não muda: ele já é guardado sem www.
+    Página boa fica em cache, então a detecção de plataforma logo depois
+    não paga a requisição de novo. Devolve True se trocou.
+    """
+    if _serve_pagina(fornecedor.url_base, cliente):
+        return False
+
+    alternativa = _trocar_www(fornecedor.url_base)
+    if not _serve_pagina(alternativa, cliente):
+        return False
+
+    log.warning("%s: %s nao entrega a pagina; usando %s",
+                fornecedor.dominio, fornecedor.url_base, alternativa)
+    fornecedor.url_base = alternativa
+    return True
+
+
+def validar(fornecedor: Fornecedor, cliente: Cliente,
+            buscar_cnpj_no_site: bool = True) -> Fornecedor:
+    """Aplica o pipeline de validação a um fornecedor. Idempotente.
+
+    `buscar_cnpj_no_site=False` desliga a garimpagem de CNPJ no site e
+    deixa PENDENTE quem chegou sem o número. É o passo mais caro da
+    etapa: sem CNPJ na planilha, o código abre a home e mais quatro
+    páginas institucionais atrás dele, com retry, e são ~40 s por
+    empresa. A base regional tem 102 empresas assim -- só elas custam
+    mais de uma hora, para um resultado que a prospecção consegue em
+    minutos abrindo o site.
+    """
     # Reprovação decidida por gente não se revisita em lote.
     if fornecedor.status is Status.REPROVADO:
         return fornecedor
 
-    if not fornecedor.cnpj:
+    if not fornecedor.cnpj and buscar_cnpj_no_site:
+        resolver_www(fornecedor, cliente)
         try:
             fornecedor.cnpj = extrair_do_site(fornecedor.url_base, cliente)
         except ErroHTTP as e:
@@ -450,7 +587,12 @@ def validar(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
 
     if not fornecedor.cnpj:
         fornecedor.status = Status.PENDENTE
-        fornecedor.motivo = "CNPJ não encontrado no site"
+        # Continua no master, e não some: fornecedor que desaparece em
+        # silêncio é fornecedor que a prospecção vai pesquisar de novo.
+        # PENDENTE já o mantém fora da varredura, que só varre APROVADO.
+        fornecedor.motivo = ("sem CNPJ na planilha; não foi consultado"
+                             if not buscar_cnpj_no_site
+                             else "CNPJ não encontrado no site")
         return fornecedor
 
     dados = consultar(fornecedor.cnpj, cliente)
@@ -479,7 +621,19 @@ def validar(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
     # A detecção de plataforma só roda em quem passou: ela custa uma
     # requisição e não adianta saber a plataforma de um reprovado.
     if status is Status.APROVADO:
-        fornecedor.plataforma = detectar(fornecedor.url_base, cliente)
+        # É este endereço que vai para o master e que a varredura visita.
+        # Resposta boa fica em cache, então a detecção logo abaixo não
+        # paga a requisição de novo.
+        resolver_www(fornecedor, cliente)
+        detectada = detectar(fornecedor.url_base, cliente)
+        # "desconhecida" também é o que detectar() devolve quando a home
+        # não abre -- e rede instável não pode apagar o que já se sabia.
+        # A revalidação de 23/09 rodou com ReadError em metade dos sites e
+        # derrubou 28 plataformas detectadas (20 WooCommerce, 5 Tray...)
+        # para desconhecida. Plataforma velha errada não faz estrago: a
+        # sonda do registro confere a API antes de usar o adapter.
+        if detectada is not Plataforma.DESCONHECIDA:
+            fornecedor.plataforma = detectada
 
     return fornecedor
 
@@ -545,8 +699,62 @@ def testar_entrega(fornecedor: Fornecedor, cliente: Cliente) -> Fornecedor:
     return decidir_entrega(fornecedor)
 
 
+def atualizar_busca(pasta_leads: Path = LEADS, caminho: Path = SAIDA,
+                    limpar: bool = False,
+                    destino: Path = validacao_por_aba.SAIDA) -> tuple[int, int]:
+    """Só relê a configuração de busca das planilhas. Não toca na rede.
+
+    Existe por causa do ritmo do trabalho: conferir a busca de 89 lojas
+    é uma tarde de idas e vindas, e se cada salvamento custasse uma
+    revalidação de 122 CNPJs ninguém usaria as duas colunas.
+
+    Mexe em `url_busca` e `seletor_busca` e em mais nada: status, CNAE e
+    situação cadastral continuam sendo assunto da validação.
+
+    **Nada é apagado sem pedido.** Célula em branco não desconfigura o
+    site, porque coluna ausente e célula vazia chegam aqui iguais — e
+    quem larga só a planilha de EPI na pasta apagaria a configuração das
+    outras cinco abas sem perceber. Para zerar de propósito existe
+    `limpar=True` (`--so-busca --do-zero`).
+    """
+    if not caminho.exists():
+        raise FileNotFoundError(
+            f"{caminho} nao existe. Rode antes: python -m src.runners.etapa1_validar"
+        )
+
+    fornecedores = ler_fornecedores(apenas_aprovados=False, caminho=caminho)
+    if limpar:
+        for forn in fornecedores.values():
+            forn.url_busca = forn.seletor_busca = ""
+
+    configurados = 0
+    desconhecidos: list[str] = []
+
+    for lead in ler_leads(pasta_leads):
+        if not (lead.url_busca or lead.seletor_busca):
+            continue
+        forn = fornecedores.get(lead.dominio)
+        if forn is None:
+            # Domínio que não está no master: ou é site novo (e a
+            # validação precisa rodar antes), ou é erro de digitação na
+            # coluna do site. Os dois merecem aparecer.
+            desconhecidos.append(lead.dominio)
+            continue
+        forn.url_busca = lead.url_busca or forn.url_busca
+        forn.seletor_busca = lead.seletor_busca or forn.seletor_busca
+        configurados += 1
+
+    gravar_fornecedores(list(fornecedores.values()), caminho)
+    validacao_por_aba.gerar(list(fornecedores.values()), destino)
+
+    if desconhecidos:
+        log.warning("%d dominio(s) com busca configurada nao estao no master: %s",
+                    len(desconhecidos), ", ".join(sorted(desconhecidos)[:10]))
+    return configurados, len(desconhecidos)
+
+
 def main(com_frete: bool = False, retomar: bool = True,
-         por_aba: bool = True) -> list[Fornecedor]:
+         por_aba: bool = True, so_com_cnpj: bool = False) -> list[Fornecedor]:
     fornecedores = unificar_planilhas()
 
     # Retomar aproveita CNPJ e CNAE já resolvidos numa execução anterior:
@@ -555,6 +763,14 @@ def main(com_frete: bool = False, retomar: bool = True,
         anteriores = ler_fornecedores(apenas_aprovados=False, caminho=SAIDA)
         for f in fornecedores:
             antigo = anteriores.get(f.dominio)
+            if antigo:
+                # Fora do `if` de situação cadastral de propósito: a
+                # configuração de busca é trabalho humano, não resultado
+                # de validação. Um site PENDENTE (os de pneu esperando a
+                # decisão de CNAE) perderia o seletor conferido à mão na
+                # primeira revalidação, sem aviso.
+                f.url_busca = f.url_busca or antigo.url_busca
+                f.seletor_busca = f.seletor_busca or antigo.seletor_busca
             if antigo and antigo.situacao_cadastral:
                 f.cnpj = f.cnpj or antigo.cnpj
                 f.cnae_principal = antigo.cnae_principal
@@ -568,7 +784,7 @@ def main(com_frete: bool = False, retomar: bool = True,
         for f in fornecedores:
             f.dominio = normalizar_dominio(f.url_base)
             try:
-                validar(f, cliente)
+                validar(f, cliente, buscar_cnpj_no_site=not so_com_cnpj)
                 if com_frete:
                     testar_entrega(f, cliente)
             except Exception:
@@ -583,6 +799,11 @@ def main(com_frete: bool = False, retomar: bool = True,
           f"{contagem[Status.PENDENTE]} pendentes, "
           f"{contagem[Status.REPROVADO]} reprovados -> {SAIDA}")
 
+    if so_com_cnpj:
+        ignorados = sum(1 for f in fornecedores if not f.cnpj)
+        print(f"{ignorados} sem CNPJ na planilha foram ignorados "
+              f"(ficaram PENDENTE, fora da varredura)")
+
     # O master é para o pipeline; quem prospectou confere na própria aba.
     if por_aba:
         for caminho in validacao_por_aba.gerar(fornecedores):
@@ -596,13 +817,26 @@ if __name__ == "__main__":
     p.add_argument("--com-frete", action="store_true",
                    help="também testa entrega nos 3 CEPs (lento)")
     p.add_argument("--do-zero", action="store_true",
-                   help="ignora o master anterior e reconsulta todos os CNPJ")
+                   help="ignora o master anterior e reconsulta todos os CNPJ; "
+                        "com --so-busca, zera a configuração antes de reler")
     p.add_argument("--sem-planilhas", action="store_true",
                    help="não gera as planilhas de conferência por aba")
+    p.add_argument("--so-busca", action="store_true",
+                   help="só relê a URL/seletor de busca das planilhas; sem rede")
+    p.add_argument("--so-com-cnpj", action="store_true",
+                   help="ignora quem chegou sem CNPJ, em vez de garimpar no site "
+                        "(é o passo mais caro: ~40 s por empresa)")
     a = p.parse_args()
     try:
+        if a.so_busca:
+            configurados, fora = atualizar_busca(limpar=a.do_zero)
+            print(f"{configurados} site(s) com busca configurada -> {SAIDA}")
+            if fora:
+                print(f"{fora} dominio(s) da planilha nao estao no master; "
+                      f"rode a validacao completa para inclui-los")
+            raise SystemExit(0)
         main(com_frete=a.com_frete, retomar=not a.do_zero,
-             por_aba=not a.sem_planilhas)
+             por_aba=not a.sem_planilhas, so_com_cnpj=a.so_com_cnpj)
     except PlanilhaSemColunaDeSite as e:
         # Problema de arquivo de entrada, não defeito de código: a
         # mensagem já diz qual planilha e quais colunas ela tem.

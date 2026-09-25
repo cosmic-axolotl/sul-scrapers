@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from src.core.http import Cliente
+from src.core.http import Cliente, ErroHTTP
+from src.core.log import obter
 from src.models import Fornecedor, ProdutoBruto
+
+log = obter(__name__)
 
 
 class Executor(ABC):
@@ -27,6 +30,36 @@ class Executor(ABC):
         self.cliente = cliente
 
     # --- Etapa 2: varredura -------------------------------------------------
+
+    # Endpoint que prova que a loja fala mesmo esta API, com {base}.
+    # Vazio significa "não dá para sondar": assume-se que fala.
+    SONDA: str = ""
+
+    def api_responde(self) -> bool:
+        """A plataforma foi detectada, mas a API dela existe nesta loja?
+
+        Não é a mesma pergunta. A detecção lê marcador no HTML da home;
+        a busca precisa do endpoint ligado. Das 20 lojas WooCommerce
+        aprovadas, 15 respondem 404 em `/wp-json/wc/store/v1` — o
+        plugin da Store API não está ativo, ou o WAF bloqueia a rota.
+
+        Sem esta pergunta, essas 15 entram na varredura, recebem lista
+        vazia em todos os 132 itens e saem do relatório como "não vende
+        nada" — indistinguíveis de uma loja varrida de verdade. Quem
+        responde não, vai para o navegador, que enxerga o que o
+        comprador enxerga.
+        """
+        if not self.SONDA:
+            return True
+
+        url = self.SONDA.format(base=self.fornecedor.url_base.rstrip("/"))
+        try:
+            dados = self.cliente.get_json(url)
+        except ErroHTTP as e:
+            log.info("%s: %s nao responde (%s)",
+                     self.fornecedor.dominio, self.plataforma, type(e).__name__)
+            return False
+        return isinstance(dados, (list, dict))
 
     @abstractmethod
     def buscar(self, termo: str) -> list[ProdutoBruto]:

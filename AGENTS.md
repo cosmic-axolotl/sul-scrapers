@@ -15,6 +15,8 @@ Template de saída: `data/raw/FNDE_output.xlsx` (15 colunas) + uma 16ª coluna `
 ## Regras invioláveis
 
 1. **Só entra fornecedor com CNAE principal na divisão 46** (atacado). Divisão 47 com 46 secundário entra com `flag_atacarejo = SIM`. Situação cadastral diferente de ATIVA reprova.
+   **Exceção decidida pelo grupo em 23/09/2026:** as classes **47.53-9** (eletrodomésticos e equipamentos de áudio e vídeo) e **47.59-8** (artigos de uso doméstico n.e.) entram mesmo **sem** CNAE 46 secundário, também com `flag_atacarejo = SIM`. O motivo é a categoria EQUIPAMENTO — fogão industrial, freezer e balança são vendidos por loja registrada nessas classes, e reprová-las deixava a categoria sem fornecedor para os 5 preços por item. A lista está em `CLASSES_VAREJO_ACEITAS`, comparada por classe (5 dígitos), então pega 4759-8/01 e 4759-8/99 de uma vez.
+   **Quem só entrou pela exceção só é varrido no canal `--varejista`** (ver "Dois canais" abaixo): uma loja de eletrodoméstico não é fonte de EPI nem de uniforme.
 2. **A UF da sede não é critério; entregar no Sul é.** Fornecedor de qualquer estado entra, desde que entregue em PR, SC ou RS e passe no CNAE/CNPJ. Quem decide é `entrega_sul`, e reprovação exige **recusa** da loja nas três UFs — timeout ou site fora do ar deixa PENDENTE, não reprova.
 3. **Nenhum site é coletado sem estar em `data/interim/fornecedores_master.csv` com status APROVADO.**
 4. **O site é a unidade de execução**, não o item nem a categoria. Um processo por domínio, sempre.
@@ -48,6 +50,8 @@ class Fornecedor:
     status: Status            # APROVADO | REPROVADO | PENDENTE
     motivo: str
     origem: list[str]         # ["lista_sites.xlsx :: EPI"] -- arquivo/aba de onde veio
+    url_busca: str            # "{base}/busca?q={termo}" -- conferido à mão, opcional
+    seletor_busca: str        # "#campo-busca" -- conferido à mão, opcional
 
 @dataclass
 class ProdutoBruto:           # UMA VARIAÇÃO, não um produto
@@ -75,6 +79,23 @@ class Achado:
 ```
 
 Chave de junção em todo lugar: **domínio normalizado** (minúsculo, sem `www.`, sem barra final). Nunca nome de empresa.
+
+`url_base` é a **raiz do site** (`https://www.loja.com.br`), com o `www.`
+que a loja usa e sem caminho nenhum. A prospecção cola o link que tem na
+mão, e às vezes ele é fundo — `https://consigaz.com.br/p13/`. Tudo o que
+o pipeline monta depois pendura caminho em cima disso: a busca vira
+`.../p13/busca?q=panela` e a API vira `.../p13/wp-json/...`, as duas 404.
+Seis fornecedores aprovados entraram assim na primeira varredura.
+
+O `www` vem da planilha, mas **o validador corrige quando ele está
+errado** (`resolver_www` em `etapa1_validar.py`): se o endereço não
+entrega a página e a outra forma — com ou sem `www` — entrega, a
+`url_base` troca. Nove aprovados estavam na planilha sem `www` e só
+funcionavam com ele (0 de 3 tentativas como estavam, 3 de 3 com `www`).
+"Entregar a página" é 2xx: host que responde 403 ou 404 à home existe,
+mas não serve para raspar — cinco dos nove eram assim. Se as duas formas
+entregam, ou nenhuma, fica a da planilha: a troca não é palpite. O
+domínio (a chave) não muda, porque já é guardado sem `www`.
 
 Campos acrescentados depois do congelamento são sempre **opcionais, com
 padrão**. Nada que já existia mudou de nome ou de tipo — código antigo
@@ -123,6 +144,8 @@ acento:
 | nome | nome, empresa, fornecedor, razao, estabelecimento | não |
 | uf | uf, estado | não |
 | cnpj | cnpj | não |
+| url de busca | uma palavra de (url, link, endereco) **e** uma de (busca, pesquisa, search) | não |
+| seletor de busca | uma palavra de (seletor, css, campo, input) **e** uma de (busca, pesquisa, search) | não |
 
 Basta a palavra aparecer no nome da coluna: `Site Oficial`, `Link
 (clicável)`, `URL do site` e `Site / domínio` casam todos. Nome idêntico
@@ -161,6 +184,133 @@ Lead nunca sobrescreve o que as duas bases já resolveram — ele só
 preenche buraco (nome ou UF em branco) e acrescenta domínio novo. Todo
 lead entra como PENDENTE; quem decide é o pipeline de CNPJ.
 
+## Qual executor cada loja recebe
+
+A plataforma detectada indica o adapter; uma **sonda** confirma que a
+loja responde por ele. Não é a mesma pergunta: a detecção lê marcador no
+HTML da home, a busca precisa do endpoint ligado. Das 20 lojas
+WooCommerce aprovadas, **15 respondem 404** em `/wp-json/wc/store/v1` —
+sem a sonda, essas 15 varrem 132 itens contra um 404 e saem do relatório
+como "não vende nada", indistinguíveis de uma loja varrida de verdade.
+
+Quem não responde cai no `PlaywrightExecutor`, que é também o executor
+de Tray, Magento e de toda loja sem plataforma reconhecida — 66 dos 89
+sites aprovados hoje. Adapter novo define `SONDA` e ganha a confirmação
+de graça (`Executor.api_responde()`).
+
+### Busca conferida à mão ganha da heurística
+
+Duas colunas opcionais, em **qualquer planilha de `data/raw/leads/`**:
+
+| Coluna | Exemplo | O que faz |
+|---|---|---|
+| `URL de busca` | `https://loja.com.br/busca?q={termo}` | a varredura vai direto nela |
+| `Seletor de busca` | `#campo-busca` | o campo que a varredura preenche |
+
+Os nomes são reconhecidos por regra **composta** — o nome da coluna
+precisa de uma palavra de endereço (`url`, `link`, `endereço`) **e** uma
+de busca (`busca`, `pesquisa`, `search`). Sinônimo solto não serve:
+"URL de busca" tem a palavra "url" e seria confundida com a coluna do
+site, o que faria a varredura buscar na home de todo mundo.
+
+Vale colar a URL de teste que funcionou (`/busca?q=panela`): o valor do
+parâmetro vira `{termo}` sozinho. URL sem lugar reconhecível para o
+termo é **recusada com aviso** — usá-la como está repetiria a mesma
+busca nos 132 itens e registraria o mesmo resultado para todos.
+
+Preenchido é ordem, não sugestão: o site vai para o navegador mesmo
+tendo plataforma com API, sem sonda e sem descoberta. Quem preencheu
+abriu a loja, buscou e viu o resultado; a heurística só chuta bem.
+
+As planilhas de `data/output/validacao_*.xlsx` trazem as duas colunas de
+volta, mostrando o que já está configurado. Preencher e salvar uma cópia
+em `data/raw/leads/` fecha o círculo — elas têm coluna de site, de
+empresa e de CNPJ, então são lidas como lead sem ninguém aprender
+formato novo.
+
+```bash
+python -m src.runners.etapa1_validar --so-busca            # relê só a config, sem rede
+python -m src.runners.etapa1_validar --so-busca --do-zero  # zera antes de reler
+```
+
+`--so-busca` existe por causa do ritmo: conferir 89 lojas é uma tarde de
+idas e vindas, e se cada salvamento custasse uma revalidação de 122
+CNPJs ninguém usaria as colunas. Ele **não apaga nada** sem `--do-zero`,
+porque coluna ausente e célula vazia chegam ao código iguais, e quem
+larga só a planilha de EPI na pasta apagaria as outras cinco abas sem
+perceber.
+
+### O executor genérico acha a barra de pesquisa sozinho
+
+Três tentativas, e a primeira que **provar** servir vira o caminho fixo
+da sessão: o campo na home (`SELETORES_BUSCA`), o botão de lupa que
+monta o campo depois do clique, e a URL montada (`/busca?q=`, `/?s=`,
+`/catalogsearch/result/?q=`…, na ordem que a plataforma sugere).
+
+Provar é o que separa este executor de um que inventa resultado. Quatro
+lojas reais mostraram quatro maneiras de enganá-lo, e cada uma virou uma
+regra:
+
+| O que a loja faz | Como ela é pega |
+|---|---|
+| `/busca?q=` responde **200 com a home** | a URL final não carrega mais o termo |
+| responde 200 com **"Página não encontrada"** | o título, antes do corpo (o corpo tem o menu inteiro) |
+| o campo busca no **blog** e acha "Olá, mundo!" | o caminho só é fixado se trouxer produto |
+| devolve a **mesma vitrine** para qualquer termo | uma busca de controle com um termo que ninguém vende |
+
+"0 Resultados da pesquisa" **é** busca que funciona — a loja só não tem
+aquele item, e continua valendo para os outros 131. Loja em que nada
+funciona levanta `BuscaNaoEncontrada`, nunca lista vazia: "não sei
+buscar aqui" é seletor a escrever, "não vende" é item a procurar em
+outro lugar.
+
+A extração roda como JavaScript na página, porque só lá o DOM está
+montado, e ignora `nav`, `header`, `footer` e link de categoria — numa
+loja real "SOBRE NÓS" e "Talheres de Mesa" entraram como produto. A
+conversão para `ProdutoBruto` é função pura e é o que os testes
+exercitam; nenhum teste sobe navegador.
+
+Loja que a heurística não pega **não é bug do genérico**: sobrescreva
+`SEL_BUSCA` ou `URL_BUSCA` numa subclasse. É para isso que os dois
+existem.
+
+## Dois canais: padrão e `--varejista`
+
+```bash
+python -m src.orquestrador varredura --categoria EQUIPAMENTO              # padrão
+python -m src.orquestrador varredura --varejista                          # varejo
+python -m src.orquestrador coleta --varejista                             # idem, coleta
+```
+
+| | Itens | Sites |
+|---|---|---|
+| padrão | `data/interim/itens.csv` (132) | todo APROVADO, **menos** quem só entrou pela exceção de varejo |
+| `--varejista` | `data/interim/itens_varejo.csv` (31) | **só** CNAE principal 47.53-9 ou 47.59-8 |
+
+Hoje isso dá 89 sites no padrão e 8 no varejista. Cinco estão nos dois:
+são 47.59-8 **com** CNAE 46 secundário, aprovados como atacarejo antes
+da exceção existir (frigo, multibar, balancassaoroque, realequipamentos,
+renovacaoporcelanas). Três estão só no varejista, porque só existem por
+causa da exceção (lujao, agourmetutilidades, ipecozinhas).
+
+Aprovado **sem CNAE** (decisão humana herdada da planilha, sem consulta)
+fica no padrão: não há CNAE que o tire de lá, e excluir por falta de dado
+seria perder fornecedor.
+
+O canal é **derivado do CNAE**, não guardado no master — um campo a mais
+sairia de sincronia na primeira edição à mão. A regra mora em
+`classificar_cnae.py` (`eh_varejista`, `so_varejista`), junto com a de
+aprovação, e as planilhas `validacao_*.xlsx` mostram o canal de cada
+site na coluna **Canal**.
+
+`itens_varejo.csv` sai da etapa 0 com a mesma limpeza da lista principal:
+
+```bash
+python -m src.runners.etapa0_limpar_itens \
+    --entrada "data/raw/Lista de Equipamentos_Varejo_Sul xlsx.xlsx" \
+    --saida data/interim/itens_varejo.csv
+```
+
 ## As duas fases têm planos diferentes
 
 A varredura descobre quem vende o quê; a coleta usa essa descoberta. Elas
@@ -193,7 +343,7 @@ da própria prova. A resposta continua sendo **gravada** nas duas fases: ela
 ## Convenções de código
 
 - Python 3.11+. `httpx`/`requests` primeiro; Playwright só quando o conteúdo depende de JS, tem desafio de bot, ou o CEP não tem endpoint.
-- Detectar plataforma antes de escrever scraper. VTEX, WooCommerce, Shopify e Nuvemshop têm busca em JSON — usar a API, não o HTML.
+- Detectar plataforma antes de escrever scraper. VTEX, WooCommerce, Shopify e Nuvemshop têm busca em JSON — usar a API, não o HTML, e confirmar com a `SONDA` que a loja responde por ela.
 - Adapters implementam `LojaAdapter` (`buscar(termo) -> list[ProdutoBruto]`, `detectar(html_home, url) -> bool`). Quem escreve adapter não mexe em matching e vice-versa.
 - Rate limit: máximo 3 requisições concorrentes por domínio, `sleep(random.uniform(1,3))` entre elas. Cache em disco de toda resposta HTTP bruta.
 - Saídas intermediárias em CSV versionado. Excel só no final, gerado por script. Nunca editar planilha na mão — correções viram linha em `data/raw/correcoes.csv`.

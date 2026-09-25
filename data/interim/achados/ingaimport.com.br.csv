@@ -1,0 +1,13 @@
+id_item,dominio,url_produto,titulo_encontrado,score_match,preco_indicativo,coletado_em,classificacao,motivo_match,sku
+U037,ingaimport.com.br,https://www.ingaimport.com.br/produto/escorredor-de-massas-calcas-o-26cm-cm72-12673,ESCORREDOR DE MASSAS C/ALÇAS Ø 26CM - CM72,0.502,,2026-09-23T09:27:17,revisar,,
+U039,ingaimport.com.br,https://www.ingaimport.com.br/produto/escorredor-de-massas-calcas-o-26cm-cm72-12673,ESCORREDOR DE MASSAS C/ALÇAS Ø 26CM - CM72,0.502,,2026-09-23T09:28:37,revisar,,
+U040,ingaimport.com.br,https://www.ingaimport.com.br/produto/escumadeira-de-silicone-c-cabo-inox-34cm-cm144-12411,ESCUMADEIRA DE SILICONE C/ CABO INOX 34CM - CM144,0.514,,2026-09-23T09:29:55,revisar,comprimento pedida [0.64] e o produto traz [0.34],
+U041,ingaimport.com.br,https://www.ingaimport.com.br/produto/espatula-reta-25x10cm-cm72-12415,ESPÁTULA RETA 25X10CM - CM72,0.533,,2026-09-23T09:30:30,revisar,"comprimento pedida [0.12] e o produto traz [0.1, 0.25]",
+U043,ingaimport.com.br,https://www.ingaimport.com.br/produto/faca-profissional-6-cm72-12719,FACA PROFISSIONAL 6 - CM72,0.663,,2026-09-23T09:31:51,aceito,,
+U044,ingaimport.com.br,https://www.ingaimport.com.br/produto/faca-profissional-6-cm72-12719,FACA PROFISSIONAL 6 - CM72,0.663,,2026-09-23T09:32:26,aceito,,
+U045,ingaimport.com.br,https://www.ingaimport.com.br/produto/faca-profissional-6-cm72-12719,FACA PROFISSIONAL 6 - CM72,0.663,,2026-09-23T09:33:06,aceito,,
+U046,ingaimport.com.br,https://www.ingaimport.com.br/produto/faca-profissional-6-cm72-12719,FACA PROFISSIONAL 6 - CM72,0.663,,2026-09-23T09:33:33,aceito,,
+U052,ingaimport.com.br,https://www.ingaimport.com.br/produto/jarra-milano-2-litros-cm6-13864,JARRA MILANO 2 LITROS - CM6,0.55,,2026-09-23T09:38:28,revisar,,
+U063,ingaimport.com.br,https://www.ingaimport.com.br/produto/pegador-universal-inox-gold-29cm-cm80-11769,PEGADOR UNIVERSAL INOX GOLD 29CM - CM80,0.784,,2026-09-22T15:06:08,aceito,,
+U064,ingaimport.com.br,https://www.ingaimport.com.br/produto/peneira-de-inox-o-18x35cm-cm120-11048,PENEIRA DE INOX Ø 18X35CM - CM120,0.619,,2026-09-23T09:48:47,revisar,,
+U068,ingaimport.com.br,https://www.ingaimport.com.br/produto/ralador-de-inox-4-faces-23cm-11117,RALADOR DE INOX 4 FACES 23CM,0.504,,2026-09-22T15:11:41,revisar,"comprimento pedida [0.106, 0.195] e o produto traz [0.23]",

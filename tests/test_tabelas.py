@@ -110,7 +110,16 @@ def test_id_item_alfanumerico_continua_texto(tmp_path):
     [
         ("4641902", [], "ATIVA", Status.APROVADO, False),
         ("4759899", ["4649499"], "ATIVA", Status.APROVADO, True),
-        ("4759899", [], "ATIVA", Status.REPROVADO, False),
+        # 47.53-9 e 47.59-8 entram sem precisar de 46 secundário, por
+        # decisão do grupo — e entram marcadas como atacarejo.
+        ("4759899", [], "ATIVA", Status.APROVADO, True),
+        ("4759801", [], "ATIVA", Status.APROVADO, True),
+        ("4753900", [], "ATIVA", Status.APROVADO, True),
+        # o resto do varejo continua reprovando
+        ("4789004", [], "ATIVA", Status.REPROVADO, False),
+        ("4761003", [], "ATIVA", Status.REPROVADO, False),
+        # e a situação cadastral continua mandando mais que o CNAE
+        ("4753900", [], "BAIXADA", Status.REPROVADO, False),
         ("4641902", [], "BAIXADA", Status.REPROVADO, False),
         ("1091102", [], "ATIVA", Status.REPROVADO, False),
         ("4530703", [], "ATIVA", Status.PENDENTE, False),

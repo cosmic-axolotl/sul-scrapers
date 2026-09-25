@@ -17,6 +17,12 @@ entrega `EPI.xlsx` no meio do prazo.
 Um site que veio de duas abas (astrodistribuidora.com está em EPI e em
 UNIFORME) sai nas duas planilhas, com a mesma validação. Repetir é o
 certo aqui: cada aba tem que fechar sozinha com o que a pessoa mandou.
+
+As colunas "URL de busca" e "Seletor de busca" são de ida e volta: saem
+mostrando o que já está configurado, e a planilha preenchida volta ao
+pipeline se for salva em `data/raw/leads/`. Esta planilha é lida como
+lead -- tem coluna de site, de empresa e de CNPJ -- então o círculo
+fecha sem ninguém aprender formato novo.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from pathlib import Path
 from src.core import tabelas
 from src.core.log import obter
 from src.models import Fornecedor, Status
+from src.validacao.classificar_cnae import eh_varejista, so_varejista
 
 log = obter(__name__)
 
@@ -35,15 +42,15 @@ SAIDA = Path("data/output")
 
 COLUNAS = [
     "Empresa", "CNPJ", "Site", "UF", "Status", "Motivo", "CNAE principal",
-    "CNAEs secundários", "Situação cadastral", "Atacarejo", "Plataforma",
-    "Também em",
+    "CNAEs secundários", "Situação cadastral", "Atacarejo", "Canal",
+    "Plataforma", "URL de busca", "Seletor de busca", "Também em",
 ]
 
 LARGURAS = {
     "Empresa": 34, "CNPJ": 20, "Site": 38, "UF": 6, "Status": 12,
     "Motivo": 46, "CNAE principal": 15, "CNAEs secundários": 24,
-    "Situação cadastral": 20, "Atacarejo": 11, "Plataforma": 14,
-    "Também em": 28,
+    "Situação cadastral": 20, "Atacarejo": 11, "Canal": 18, "Plataforma": 14,
+    "URL de busca": 40, "Seletor de busca": 24, "Também em": 28,
 }
 
 # Ordem de leitura: primeiro o que serve, depois o que falta resolver,
@@ -116,9 +123,27 @@ def _linha(forn: Fornecedor, origem: str) -> list[str]:
         " | ".join(forn.cnaes_secundarios),
         forn.situacao_cadastral or "",
         "SIM" if forn.flag_atacarejo else "",
+        canal(forn),
         str(forn.plataforma or ""),
+        forn.url_busca,
+        forn.seletor_busca,
         ", ".join(_aba(o) for o in outras),
     ]
+
+
+def canal(forn: Fornecedor) -> str:
+    """Em qual varredura este fornecedor entra. Vazio se não for aprovado.
+
+    padrão = `python -m src.orquestrador varredura ...`
+    varejista = o mesmo comando com --varejista
+    """
+    if forn.status is not Status.APROVADO:
+        return ""
+    no_varejo = eh_varejista(forn.cnae_principal)
+    no_padrao = not so_varejista(forn.cnae_principal, forn.cnaes_secundarios)
+    if no_varejo and no_padrao:
+        return "padrão + varejista"
+    return "varejista" if no_varejo else "padrão"
 
 
 def _ordem(forn: Fornecedor) -> tuple[int, str]:

@@ -104,6 +104,34 @@ def test_url_sem_esquema_vira_https(pasta):
     assert lead.url_base == "https://gama.com.br"
 
 
+@pytest.mark.parametrize(("colado", "esperado"), [
+    ("https://consigaz.com.br/p13/", "https://consigaz.com.br"),
+    ("https://www.supergasbras.com.br/supergasbras/botijao-de-gas-p13",
+     "https://www.supergasbras.com.br"),
+    ("https://www.macropampa.com/empresa.php", "https://www.macropampa.com"),
+    ("http://loja.com.br/busca?q=x", "http://loja.com.br"),
+])
+def test_link_fundo_vira_a_raiz_do_site(pasta, colado, esperado):
+    """A busca e a API são penduradas na url_base: com o caminho do
+    produto dentro, as duas viram 404. Seis fornecedores aprovados
+    entraram assim na primeira varredura."""
+    escrever(pasta, "leads.csv", {"Site": [colado]})
+
+    [lead] = ler_leads(pasta)
+
+    assert lead.url_base == esperado
+
+
+def test_a_raiz_preserva_o_www(pasta):
+    """Site que redireciona para www custa um 301 a cada busca sem ele."""
+    escrever(pasta, "leads.csv", {"Site": ["https://www.alfa.com.br/produtos"]})
+
+    [lead] = ler_leads(pasta)
+
+    assert lead.url_base == "https://www.alfa.com.br"
+    assert lead.dominio == "alfa.com.br"          # a chave continua sem www
+
+
 def test_so_a_coluna_de_site_e_obrigatoria(pasta):
     """Sem nome, sem UF, sem CNPJ: ainda assim é um lead utilizável."""
     escrever(pasta, "minimo.csv", {"site": ["delta.com.br"]})

@@ -262,3 +262,60 @@ def test_a_entrega_nunca_repete_fornecedor_no_mesmo_item_e_uf(projeto):
 
     ws = load_workbook(projeto / "data/output/UTENSILIOS.xlsx").active
     assert ws.max_row == 2  # cabeçalho + uma linha só
+
+
+# ---------------------------------------------------------------------------
+# --so-com-cnpj: não garimpar CNPJ no site
+# ---------------------------------------------------------------------------
+
+def test_sem_cnpj_fica_pendente_sem_tocar_no_site(cliente_falso):
+    """O passo mais caro da etapa 1: 102 empresas da base regional sem
+    CNPJ custam mais de uma hora de raspagem."""
+    from src.models import Fornecedor, Status
+    from src.runners.etapa1_validar import validar
+
+    cliente = cliente_falso()
+    forn = Fornecedor(nome="Alfa", dominio="alfa.com.br",
+                      url_base="https://alfa.com.br", uf="PR")
+
+    validar(forn, cliente, buscar_cnpj_no_site=False)
+
+    assert forn.status is Status.PENDENTE
+    assert "sem CNPJ na planilha" in forn.motivo
+    assert cliente.pedidos == []          # nenhuma requisição
+
+
+def test_com_cnpj_continua_sendo_validado(cliente_falso, tmp_path, monkeypatch):
+    from src.models import Fornecedor, Status
+    from src.runners.etapa1_validar import validar
+
+    # A consulta lê data/raw/cnpj/ antes da rede: sem isolar o cache, o
+    # teste responde com o CNAE real que estiver gravado na máquina.
+    monkeypatch.setattr("src.validacao.consultar_cnpj.CACHE", tmp_path / "cnpj")
+
+    cliente = cliente_falso({"minhareceita": {
+        "razao_social": "ALFA LTDA", "cnae_fiscal": 4642702,
+        "descricao_situacao_cadastral": "ATIVA", "cnaes_secundarios": [],
+    }})
+    forn = Fornecedor(nome="Alfa", dominio="alfa.com.br",
+                      url_base="https://alfa.com.br", uf="PR",
+                      cnpj="61340901000117")
+
+    validar(forn, cliente, buscar_cnpj_no_site=False)
+
+    assert forn.status is Status.APROVADO
+    assert forn.cnae_principal == "4642702"
+
+
+def test_por_padrao_ainda_garimpa_no_site(cliente_falso):
+    """Quem não pedir o atalho continua com o comportamento de sempre."""
+    from src.models import Fornecedor
+    from src.runners.etapa1_validar import validar
+
+    cliente = cliente_falso()
+    forn = Fornecedor(nome="Alfa", dominio="alfa.com.br",
+                      url_base="https://alfa.com.br", uf="PR")
+
+    validar(forn, cliente)
+
+    assert cliente.pedidos          # tentou ler o site

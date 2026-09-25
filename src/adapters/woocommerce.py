@@ -28,6 +28,10 @@ log = obter(__name__)
 class WooExecutor(Executor):
     plataforma = "woocommerce"
 
+    # 15 das 20 lojas Woo aprovadas respondem 404 aqui. Quem não
+    # responder é varrido pelo navegador -- ver Executor.api_responde().
+    SONDA = "{base}/wp-json/wc/store/v1/products?per_page=1"
+
     def buscar(self, termo: str) -> list[ProdutoBruto]:
         url = (f"{self.fornecedor.url_base.rstrip('/')}"
                f"/wp-json/wc/store/v1/products?search={quote(termo)}&per_page=20")
