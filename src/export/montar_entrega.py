@@ -40,6 +40,12 @@ ALVO_POR_ITEM = 5
 SCORE_MINIMO = 0.6  # abaixo disso o matching nem classifica como "revisar"
 
 RESERVA = Path("data/interim/reserva.csv")
+# Decisão humana sobre os achados "revisar", um por linha: dominio,
+# id_item, decisao (aceito | recusado). A coleta de utensílios acrescenta
+# as linhas novas com a decisão em branco; quem confere preenche.
+REVISAO = Path("data/raw/revisao.csv")
+ACEITO = {"aceito", "aceitar", "sim", "s", "ok"}
+RECUSADO = {"recusado", "recusar", "nao", "não", "n"}
 PENDENCIAS = Path("data/interim/pendencias.csv")
 
 
@@ -47,15 +53,51 @@ PENDENCIAS = Path("data/interim/pendencias.csv")
 # Seleção
 # ---------------------------------------------------------------------------
 
-def problema(candidato: dict) -> str:
+def ler_revisao(caminho: Path = REVISAO) -> dict[tuple[str, str], str]:
+    """{(dominio, id_item): "aceito" | "recusado"} -- só as decididas."""
+    if not caminho.exists():
+        return {}
+    decisoes: dict[tuple[str, str], str] = {}
+    with caminho.open(encoding="utf-8-sig", newline="") as f:
+        for linha in csv.DictReader(f):
+            chave = ((linha.get("dominio") or "").strip().lower(),
+                     (linha.get("id_item") or "").strip())
+            decisao = (linha.get("decisao") or "").strip().lower()
+            if decisao in ACEITO:
+                decisoes[chave] = "aceito"
+            elif decisao in RECUSADO:
+                decisoes[chave] = "recusado"
+    return decisoes
+
+
+def problema(candidato: dict, revisao: dict[tuple[str, str], str] | None = None) -> str:
     """Por que este registro NÃO pode ir para a entrega. "" = pode.
 
     São as três coisas que o solicitante confere numa linha: que tem
     preço, que tem prova, e que o produto é mesmo o pedido.
+
+    Registro com `classificacao = revisar` (a coleta de utensílios pelo
+    navegador grava os achados duvidosos também) só entra com "aceito"
+    em data/raw/revisao.csv -- e aí o score mínimo não vale mais, porque
+    uma pessoa olhou o produto, que é o que o score tenta adivinhar.
+    Registro sem o campo é da etapa 3, que só coleta aceito.
     """
+    revisado = False
+    if candidato.get("classificacao") == "revisar":
+        decisao = (revisao or {}).get(
+            (candidato.get("dominio", ""), candidato.get("id_item", "")))
+        if decisao == "recusado":
+            return "recusado na revisão"
+        if decisao != "aceito":
+            return f"match a revisar (decidir em {REVISAO})"
+        revisado = True
+
     preco = candidato.get("preco_final") or candidato.get("preco_produto")
     if preco in (None, "") or _numero(preco) <= 0:
         return "sem preço"
+
+    if candidato.get("disponivel") is False:
+        return "produto indisponível"
 
     caminho = (candidato.get("caminho_print") or "").strip()
     if not caminho:
@@ -74,17 +116,20 @@ def problema(candidato: dict) -> str:
         if houve_recusa(obs_frete):
             return "fornecedor não entrega nesta UF"
 
-    if _numero(candidato.get("score_match")) < SCORE_MINIMO:
+    if not revisado and _numero(candidato.get("score_match")) < SCORE_MINIMO:
         return f"score {_numero(candidato.get('score_match')):.2f} abaixo do mínimo"
 
     return ""
 
 
-def escolher_cinco(candidatos: list[dict]) -> tuple[list[dict], list[dict]]:
+def escolher_cinco(candidatos: list[dict],
+                   revisao: dict[tuple[str, str], str] | None = None
+                   ) -> tuple[list[dict], list[dict]]:
     """Os 5 que vão para a entrega e os que sobram para a reserva.
 
     Critério, nessa ordem: descarta o que não serve; um registro por
-    domínio; maior score_match; depois menor preço final.
+    domínio; aceito antes de revisado; maior score_match; depois menor
+    preço final.
 
     A reserva vai para data/interim/reserva.csv e fica só no repositório.
     Ela carrega o motivo de cada exclusão -- sem isso, "por que este
@@ -94,7 +139,7 @@ def escolher_cinco(candidatos: list[dict]) -> tuple[list[dict], list[dict]]:
     reserva: list[dict] = []
 
     for c in candidatos:
-        motivo = problema(c)
+        motivo = problema(c, revisao)
         if motivo:
             reserva.append({**c, "motivo_reserva": motivo})
         else:
@@ -102,7 +147,8 @@ def escolher_cinco(candidatos: list[dict]) -> tuple[list[dict], list[dict]]:
 
     ordenados = sorted(
         validos,
-        key=lambda c: (-_numero(c.get("score_match")), _preco(c)),
+        key=lambda c: (c.get("classificacao") == "revisar",
+                       -_numero(c.get("score_match")), _preco(c)),
     )
 
     escolhidos: list[dict] = []
@@ -149,6 +195,7 @@ def montar(entrada: Path, saida: Path, categorias: list[str] | None = None) -> d
     itens = tabelas.ler_itens(categorias)
     fornecedores = tabelas.ler_fornecedores(apenas_aprovados=False)
     coletas = ler_coletas(entrada)
+    revisao = ler_revisao()
 
     if not coletas:
         log.warning("nenhuma coleta em %s -- a etapa 3 ja rodou?", entrada)
@@ -166,7 +213,7 @@ def montar(entrada: Path, saida: Path, categorias: list[str] | None = None) -> d
     linhas_por_categoria: dict[str, list[tuple[dict, dict]]] = defaultdict(list)
 
     for (categoria, id_item, uf), candidatos in sorted(grupos.items()):
-        escolhidos, reserva = escolher_cinco(candidatos)
+        escolhidos, reserva = escolher_cinco(candidatos, revisao)
         reserva_geral.extend(reserva)
 
         if len(escolhidos) < ALVO_POR_ITEM:

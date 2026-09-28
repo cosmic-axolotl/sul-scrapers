@@ -54,10 +54,16 @@ def varrer_site(executor: Executor, itens: list[Item]) -> dict:
 
         try:
             for termo in item.termos_busca or matching.gerar_termos(item):
+                novo = None
                 for produto in executor.buscar(termo):
                     avaliacao = matching.avaliar(item.descricao, produto.titulo)
                     if melhor is None or avaliacao.score > melhor[0].score:
-                        melhor = (avaliacao, produto)
+                        melhor = novo = (avaliacao, produto)
+                # O card é clicado enquanto a página de resultado deste
+                # termo ainda está aberta: a URL que vale é a que o
+                # navegador alcança, não o href que a extração leu.
+                if novo is not None and novo[0].classificacao != "descartado":
+                    novo[1].url = executor.abrir_card(novo[1])
                 # Termos vão do mais específico ao mais genérico: se o
                 # específico já deu match bom, não precisa dos outros.
                 if melhor and melhor[0].classificacao == "aceito":

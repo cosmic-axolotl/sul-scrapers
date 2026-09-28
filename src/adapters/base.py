@@ -68,6 +68,17 @@ class Executor(ABC):
         Não filtra nem pontua nada: isso é trabalho do matching.
         """
 
+    def abrir_card(self, produto: ProdutoBruto) -> str:
+        """A URL da página do produto, a que o comprador chega clicando.
+
+        Chamado pela varredura logo depois de `buscar()`, com a página de
+        resultado ainda aberta. O padrão devolve a URL que a busca já
+        trouxe, que é o certo para adapter de API. O executor de navegador
+        clica no card: link extraído do HTML pode ser de categoria, e card
+        montado em JavaScript nem tem link.
+        """
+        return produto.url
+
     # --- Etapa 3: coleta ----------------------------------------------------
 
     def detalhar(self, url_produto: str) -> ProdutoBruto:

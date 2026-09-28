@@ -261,6 +261,38 @@ EXTRAIR = """() => {
 }"""
 
 
+# Acha o card de um produto na página de resultado e o marca para o
+# clique. Primeiro pelo link (o href que a extração leu), depois pelo
+# título: card montado em JavaScript não tem link nenhum. Tira o
+# target="_blank" para o clique não abrir aba que ninguém acompanha.
+MARCAR_CARD = """([url, titulo]) => {
+  const limpo = (t) => (t || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+  const visivel = (el) => { const r = el.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0; };
+  const fora = (el) => el.closest('nav,header,footer,[role="navigation"]');
+  document.querySelectorAll('[data-sul-card]').forEach(e => e.removeAttribute('data-sul-card'));
+  const alvoTitulo = limpo(titulo).slice(0, 80);
+  let alvo = [...document.querySelectorAll('a[href]')].find(a =>
+    a.href === url && visivel(a) && !fora(a));
+  if (!alvo && alvoTitulo) {
+    alvo = [...document.querySelectorAll('a[href]')].find(a => visivel(a) && !fora(a) &&
+      (limpo(a.getAttribute('title')).startsWith(alvoTitulo) ||
+       limpo(a.innerText).startsWith(alvoTitulo)));
+  }
+  if (!alvo && alvoTitulo) {
+    const folhas = [...document.querySelectorAll('h2,h3,h4,span,div,p,strong')].filter(el =>
+      el.children.length === 0 && visivel(el) && !fora(el) &&
+      limpo(el.innerText).startsWith(alvoTitulo));
+    alvo = folhas[0];
+  }
+  if (!alvo) return false;
+  const link = alvo.closest('a');
+  if (link) link.removeAttribute('target');
+  alvo.setAttribute('data-sul-card', '1');
+  return true;
+}"""
+
+
 class BuscaNaoEncontrada(FalhaDeRede):
     """Não achei como buscar nesta loja: nem campo, nem lupa, nem URL.
 
@@ -358,6 +390,52 @@ class PlaywrightExecutor(Executor):
         log.info("%s: %r -> %d produtos (por %s)", self.fornecedor.dominio,
                  termo, len(produtos), self._caminho[0])
         return produtos
+
+    def abrir_card(self, produto: ProdutoBruto) -> str:
+        """Clica no card do produto na página de resultado e devolve a URL
+        onde o navegador parou.
+
+        Se o card não é achado, o clique não navega, ou leva para fora da
+        loja, fica a URL que a extração leu -- e o log diz por quê. A
+        página fica no produto; a próxima busca volta a partir dali.
+        """
+        if self._pagina is None:
+            return produto.url
+        antes = self._pagina.url
+        try:
+            achou = self._pagina.evaluate(MARCAR_CARD, [produto.url, produto.titulo])
+        except Exception as e:
+            log.info("%s: não consegui procurar o card de %r (%s)",
+                     self.fornecedor.dominio, produto.titulo[:60], type(e).__name__)
+            return produto.url
+        if not achou:
+            log.info("%s: card de %r não está na página; fica o link extraído",
+                     self.fornecedor.dominio, produto.titulo[:60])
+            return produto.url
+        try:
+            card = self._pagina.locator("[data-sul-card='1']").first
+            card.scroll_into_view_if_needed(timeout=TEMPO_SELETOR_MS)
+            card.click(timeout=TEMPO_SELETOR_MS)
+            self._pagina.wait_for_url(lambda u: u != antes, timeout=TEMPO_NAVEGACAO_MS // 3)
+            self._pagina.wait_for_load_state("domcontentloaded", timeout=TEMPO_SELETOR_MS * 2)
+        except Exception as e:
+            log.info("%s: clique no card de %r não navegou (%s); fica o link extraído",
+                     self.fornecedor.dominio, produto.titulo[:60], type(e).__name__)
+            return produto.url
+
+        destino = self._pagina.url
+        if self.fornecedor.dominio not in destino.lower():
+            log.info("%s: card de %r levou para fora da loja (%s)",
+                     self.fornecedor.dominio, produto.titulo[:60], destino)
+            return produto.url
+        self._conferir_bloqueio(destino)
+        if destino != produto.url:
+            log.info("%s: card de %r -> %s (link extraído era %s)",
+                     self.fornecedor.dominio, produto.titulo[:60], destino, produto.url)
+        else:
+            log.info("%s: card de %r confirmado em %s",
+                     self.fornecedor.dominio, produto.titulo[:60], destino)
+        return destino
 
     def _conferir_repeticao(self, termo: str, produtos: list[ProdutoBruto]) -> None:
         """Dois termos diferentes, resultado idêntico: a loja não buscou.

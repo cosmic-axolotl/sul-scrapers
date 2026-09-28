@@ -1,5 +1,6 @@
 id_item,dominio,url_produto,titulo_encontrado,score_match,preco_indicativo,coletado_em,classificacao,motivo_match,sku
 U037,ingaimport.com.br,https://www.ingaimport.com.br/produto/escorredor-de-massas-calcas-o-26cm-cm72-12673,ESCORREDOR DE MASSAS C/ALÇAS Ø 26CM - CM72,0.502,,2026-09-23T09:27:17,revisar,,
+U038,ingaimport.com.br,https://www.ingaimport.com.br/produto/escorredor-de-massas-calcas-o-26cm-cm72-12673,ESCORREDOR DE MASSAS C/ALÇAS Ø 26CM - CM72,0.502,,2026-09-25T18:37:08,revisar,,
 U039,ingaimport.com.br,https://www.ingaimport.com.br/produto/escorredor-de-massas-calcas-o-26cm-cm72-12673,ESCORREDOR DE MASSAS C/ALÇAS Ø 26CM - CM72,0.502,,2026-09-23T09:28:37,revisar,,
 U040,ingaimport.com.br,https://www.ingaimport.com.br/produto/escumadeira-de-silicone-c-cabo-inox-34cm-cm144-12411,ESCUMADEIRA DE SILICONE C/ CABO INOX 34CM - CM144,0.514,,2026-09-23T09:29:55,revisar,comprimento pedida [0.64] e o produto traz [0.34],
 U041,ingaimport.com.br,https://www.ingaimport.com.br/produto/espatula-reta-25x10cm-cm72-12415,ESPÁTULA RETA 25X10CM - CM72,0.533,,2026-09-23T09:30:30,revisar,"comprimento pedida [0.12] e o produto traz [0.1, 0.25]",

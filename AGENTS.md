@@ -115,6 +115,9 @@ etapa2_plano         -> data/interim/plano_coleta.csv          (site -> itens qu
                         data/output/cobertura_{CATEGORIA}.xlsx (painel, para humanos)
 etapa3_coletar       -> data/coletas/{dominio}.jsonl           (--site)
                         data/output/prints/{CATEGORIA}/...png
+coleta_utensilios    -> data/coletas/{dominio}.jsonl           (mesmo formato da etapa 3)
+                        data/output/conferencia_UTENSILIOS.xlsx
+                        data/raw/revisao.csv                   (só acrescenta; decisão é humana)
 montar_entrega       -> data/output/{CATEGORIA}.xlsx           (A ENTREGA)
                         data/interim/reserva.csv               (quem não entrou, e por quê)
                         data/interim/pendencias.csv            (item/UF sem 5 fornecedores)
@@ -270,9 +273,57 @@ loja real "SOBRE NÓS" e "Talheres de Mesa" entraram como produto. A
 conversão para `ProdutoBruto` é função pura e é o que os testes
 exercitam; nenhum teste sobe navegador.
 
+Achado o melhor produto de um termo, o executor **clica no card** na
+página de resultado e grava a URL onde o navegador chegou
+(`Executor.abrir_card`; adapter de API devolve a URL que já tem). O
+href extraído às vezes é de categoria, e card montado em JavaScript nem
+tem link. Se o card não é achado ou o clique não navega, fica o href, e
+o log diz por quê.
+
 Loja que a heurística não pega **não é bug do genérico**: sobrescreva
 `SEL_BUSCA` ou `URL_BUSCA` numa subclasse. É para isso que os dois
 existem.
+
+## Coleta de UTENSILIOS pelo navegador
+
+```bash
+python -m src.runners.coleta_utensilios                     # toda a aba Utensílios
+python -m src.runners.coleta_utensilios --site platinox.com.br --limite 2
+python -m src.runners.coleta_utensilios --varrer            # varre antes quem não tem achado
+python -m src.export.montar_entrega --categoria UTENSILIOS
+```
+
+Existe porque a etapa 3 não coleta pelo `PlaywrightExecutor` (ele não
+implementa `detalhar()` nem `cotar_frete()`), e ele é o executor de 2
+em cada 3 lojas de utensílios. Sites: APROVADO no master, com
+`origem` na aba Utensílios de `lista_sites.xlsx` **e** do canal padrão
+(agourmetutilidades, ipecozinhas e lujao estão na aba, mas só entraram
+pela exceção de varejo e ficam de fora). URLs: os achados
+**aceitos e a revisar** de `data/interim/achados/`, sem buscar de novo.
+Grava no formato da etapa 3, então o montador não muda de fluxo.
+
+Preço: JSON-LD, depois meta `price`, depois a caixa de preço visível.
+Desconto de pagamento é tratado igual em toda loja, porque o JSON-LD
+não ajuda — a Vencedor publica o cheio (14,12; 12,99 no PIX) e a
+Platinox o do PIX (169,90; 188,78 no cartão): `Preço PRODUTO` é o
+cheio, `PREÇO FINAL` o à vista, a diferença vai para `VALOR DESCONTO`.
+
+Frete: o que **apareceu** na área de frete depois do CEP, a opção mais
+barata, com o texto em `OBS FRETE`. Sem campo de CEP, ou sem valor
+legível, o valor fica vazio e a observação diz por quê — o print é a
+prova.
+
+Achado cuja URL abre sem preço ganha uma segunda chance: busca-se no
+site o título que a varredura viu e clica-se no card. `--planilha
+../lista_sites.ods` troca a origem do master pelas abas de utensílios
+da planilha (e usa o "Seletor CSS principal" dela quando o master não
+tem um); `--exportar-sites` só grava `data/interim/sites_utensilios.csv`.
+
+Achado "revisar" não vai para a entrega sozinho. O runner acrescenta o
+par (site, item) em `data/raw/revisao.csv` com `decisao` em branco;
+quem confere (com `conferencia_UTENSILIOS.xlsx` aberta) escreve
+`aceito` ou `recusado`. O montador só leva o `aceito`, e nesse caso não
+aplica o score mínimo — uma pessoa olhou o produto.
 
 ## Dois canais: padrão e `--varejista`
 

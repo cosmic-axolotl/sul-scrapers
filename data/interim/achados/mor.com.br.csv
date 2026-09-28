@@ -1,2 +1,4 @@
 id_item,dominio,url_produto,titulo_encontrado,score_match,preco_indicativo,coletado_em,classificacao,motivo_match,sku
 U027,mor.com.br,https://www.lojamor.com.br/afiador-de-faca-95cm-x-5cm-linha-do-assador-3901/p,"Afiador de Faca 9,5cm x 5cm Linha do Assador R$ 21,85 à vista ou R$ 23,00 em 1x de R$ 23,00 COMPRAR",0.481,21.85,2026-09-23T09:23:30,revisar,,
+U032,mor.com.br,https://www.lojamor.com.br/copo-antiqueda-450-ml-coffee-to-go-azul-8051/p,"-34% Promoção Copo Antiqueda 450ml Coffee To Go - Azul R$ 62,00 R$ 38,95 à vista ou R$ 41,00 em 1x de R$ 41,00 COMPRAR",0.483,62.0,2026-09-25T19:24:00,revisar,,
+U045,mor.com.br,"https://www.lojamor.com.br/faca%2020%2c5%20cm?_q=faca%2020,5%20cm&map=ft","Faca 8"" em Aço Inoxidável e Cabo em Madeira Steel R$ 66,50 à vista ou R$ 70,00 em 2x de R$ 35,00 COMPRAR",0.646,66.5,2026-09-25T19:26:36,aceito,,
